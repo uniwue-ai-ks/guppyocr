@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "guppyocr"
+description = "Simple and Fast OCR Engine (CRNN-based)"
+readme = "README.md"
+version = "0.1.0"
+keywords = ["layout", "pagesegmentation"]
+
+license = {text = "BSD 3-Clause License"}
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+    "editdistance",
+    "scipy",
+    "torch",
+    "torchvision",
+    "adabelief-pytorch",
+    "fast_ctc_decode",
+    "tqdm",
+    "docopt",
+    "opencv-python-headless",
+    "libpagexml3 @ git+https://gitlab2.informatik.uni-wuerzburg.de/nof36hn/libpagexml3.git"
+]
+
+
+[tool.setuptools]
+packages = ["guppyocr"]
+
+
+[project.scripts]
+    guppy_dump = 'guppyocr.dump'
+    guppy_predict_pxml = 'guppyocr.predict_pxml'
+
+
