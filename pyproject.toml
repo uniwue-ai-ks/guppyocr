@@ -34,7 +34,6 @@ packages = ["guppyocr"]
 
 
 [project.scripts]
-    guppy_dump = 'guppyocr.dump'
-    guppy_predict_pxml = 'guppyocr.predict_pxml'
+    guppy_dump = 'guppyocr.dump:main'
 
 
