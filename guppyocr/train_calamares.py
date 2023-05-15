@@ -138,7 +138,7 @@ if __name__ == '__main__':
             print("CPU being used!")
 
     # set training parameters
-    batch_size = 16
+    batch_size = 8
     Height = 48
     Width = 640
     feature_height = Height // 4
@@ -191,7 +191,7 @@ if __name__ == '__main__':
 
     print("Creating dataset")
     train_img_path = os.path.join(dataset_path, 'train')
-    test_img_path = os.path.join(dataset_path, 'tests')
+    test_img_path = os.path.join(dataset_path, 'test')
     train_dataset = dataset.MySynthDataset(Height, Width, seq_len, train_img_path, char2id)
     test_dataset = dataset.MySynthDataset(Height, Width, seq_len, test_img_path, char2id)
 
@@ -374,7 +374,7 @@ if __name__ == '__main__':
             with open(os.path.join(output_path,'statistics.txt'), 'a') as f:
                 f.write("TEST CER Epoch {} {}\n".format(epoch, float(np.mean(CER_SUM))))
                 f.write("Epoch {} total CER: {:.5f}\n".format(epoch, errors / total_chars))
-                f.write("Best CER (until now): {:.5f\n".format(best_total_cer))
+                f.write("Best CER (until now): {:.5f}\n".format(best_total_cer))
 
             total_cer = errors / total_chars
             if total_cer < best_total_cer:

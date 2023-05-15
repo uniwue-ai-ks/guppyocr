@@ -21,9 +21,9 @@ Usage:
     predict.py [-d] [--output_dir=DIR] [--glob] --model=MODEL <pagexml>...
 
 Options:
-    -d              Dry run. Do not save
-    --output_dir    Save to specific dir
-    --glob          Glob input files
+    -d                  Dry run. Do not save
+    --output_dir=DIR    Save to specific dir
+    --glob              Glob input files
 """
 
 def preprocess_image(img: np.ndarray, width, height) -> torch.Tensor:
@@ -68,7 +68,7 @@ if __name__ == "__main__":
             #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
             imgs = [preprocess_cutout(x,mc.mconfig.Width, mc.mconfig.Height) for x in cutouts]
 
-
+            had_gt = False
             for img, co in zip(imgs, cutouts):
                 img = img[None, :, : ,:]
 
@@ -81,10 +81,16 @@ if __name__ == "__main__":
                     distance = editdistance.distance(decoded_tgt, gt_text)
                     total_chars += len(gt_text)
                     total_errors += distance
+                    print("GT:  ", gt_text)
+                    print("Pred:", decoded_tgt)
                     #print("Pred:", decoded_tgt)
                     #print("GT:  ", gt_text)
                     #print("CER: ", editdistance.distance(decoded_tgt, gt_text) / len(gt_text))
+                    had_gt = True
 
+            if dry_run and not had_gt:
+                print(f"Stopping early at {f} because no GT has been found")
+                break
 
             # build new pagexml
             if not dry_run:

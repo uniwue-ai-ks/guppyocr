@@ -177,7 +177,7 @@ class CRNNTiny(nn.Module):
 
 class CRNN(nn.Module):
 
-    def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False):
+    def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False, dropout: float = 0.0):
         super(CRNN, self).__init__()
 
         self.channel = Channel
@@ -185,6 +185,7 @@ class CRNN(nn.Module):
         self.feature_width = feature_width
         self.output_classes = output_classes
         self.seq_len = seq_len
+        self.dropout = dropout
 
         #assert opt['imgH'] % 16 == 0, 'imgH has to be a multiple of 16'
         assert self.feature_height % 16 == 0
@@ -222,11 +223,14 @@ class CRNN(nn.Module):
         convRelu(5)
         cnn.add_module('pooling{0}'.format(3),
                        nn.MaxPool2d((4, 2), (2, 1), (0, 1)))  # 512x2x16
+
         convRelu(6, True)  # 512x1x16
+        cnn.add_module('dropout0', nn.Dropout(0.3))
         self.cnn = cnn
         self.rnn = nn.Sequential(
-            BidirectionalLSTM(512, 128, 128),
-            BidirectionalLSTM(128, 128, self.output_classes))
+            BidirectionalLSTM(512, 256, 256),
+            nn.Dropout(0.3),
+            BidirectionalLSTM(256, 128, self.output_classes))
         #print(self.cnn)
 
 
