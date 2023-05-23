@@ -1,4 +1,5 @@
 import enum
+import glob
 import itertools
 from dataclasses import dataclass, field
 from math import ceil, floor
@@ -28,7 +29,7 @@ Options:
     --skip              Skip files if no Companion file is found
     --no-greek          Skip lines containing greek characters (@)
     --squash_ats        Squash At Characters into a single char
-    
+    --glob              Glob Image Files instead of iterating
 """
 
 class FilenameEnumerator:
@@ -135,7 +136,11 @@ def main(args):
         use_region_polys=False
     )
     output_path = Path(args["<output_dir>"])
-    for x in tqdm(args["<images>"]):
+    if args["--glob"]:
+        xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in args["<images>"]]))
+    else:
+        xml_files = list(args["<images>"])
+    for x in xml_files:
         if args["--prefix"]:
             prefix = "_".join([args["--prefix"] or "", Path(x).with_suffix("").name])
         else:
