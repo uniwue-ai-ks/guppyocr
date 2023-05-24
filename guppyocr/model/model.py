@@ -1,4 +1,4 @@
-from guppyocr.model.network import CalamariNetv2, CRNN, CRNNTiny
+from guppyocr.model.network import CalamariNetv2, CRNN, CRNNTiny, STNCRNN
 from dataclasses import dataclass
 import dataclasses
 from typing import Union
@@ -40,6 +40,8 @@ class ModelConfiguration:
             return CalamariNetv2(mconfig.Channel,mconfig.Height, mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         elif mconfig.arch == "crnn":
             return CRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
+        elif mconfig.arch == "stncrnn":
+            return STNCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         else:
             raise KeyError(f"invalid model specified: {mconfig.arch}")
 

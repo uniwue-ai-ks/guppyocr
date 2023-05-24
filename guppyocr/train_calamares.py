@@ -114,7 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', type=bool, default=False, help="Use GPU")
     parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
     parser.add_argument('--cmap', type=str)
-    parser.add_argument("--arch", type=str, choices=["crnn","calamari"])
+    parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn"])
     parser.add_argument("--test", action="store_true")
 
     opt = parser.parse_args()
