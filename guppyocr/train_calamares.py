@@ -3,7 +3,9 @@ THis is the main training code.
 '''
 import itertools
 import os
+from dataclasses import dataclass
 from pathlib import Path
+from typing import List, Dict, Tuple, Optional
 
 import editdistance
 import numpy as np
@@ -26,7 +28,7 @@ from guppyocr.dataset import dataset
 from torch import nn
 
 from guppyocr.model.charmap import make_charmap_from_input_dirs
-from guppyocr.model.model import ModelParameters, ModelConfiguration
+from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
 
 
 def decode_ctc(pred, id2char) -> str:
@@ -97,6 +99,7 @@ class MetricAggregator:
         pass
 
 
+
 # main function:
 if __name__ == '__main__':
     os.nice(10)
@@ -114,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', type=bool, default=False, help="Use GPU")
     parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
     parser.add_argument('--cmap', type=str)
-    parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn"])
+    parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
     parser.add_argument("--test", action="store_true")
 
     opt = parser.parse_args()
@@ -173,6 +176,13 @@ if __name__ == '__main__':
     if trained_model_path != '':
         print("Loading Trained Model")
         mconfig, model = ModelConfiguration.load_model(trained_model_path,device)
+
+        did_ajust, result = adjust_voc_model(voc,mconfig,model, device)
+        mconfig, model = result.mconfig, result.model
+
+        if did_ajust:
+            print("Adjusted model encoding... More training is required")
+
         voc = mconfig.mconfig.voc
         id2char = mconfig.mconfig.id2char
         char2id = mconfig.mconfig.char2id
@@ -185,9 +195,12 @@ if __name__ == '__main__':
     else:
         model = mconfig.make_model(device)
         if torch.cuda.is_available() == True and opt.gpu == True:
-            model = torch.nn.DataParallel(model).to(device)
+            model = model.to(device)
         else:
             model = model.to(device)
+
+    if torch.cuda.is_available() == True and opt.gpu == True:
+        model = torch.nn.DataParallel(model).to(device)
 
     print("Creating dataset")
     train_img_path = os.path.join(dataset_path, 'train')
@@ -237,7 +250,7 @@ if __name__ == '__main__':
 
     print("Beginning training")
     best_total_cer = float("inf")
-
+#    model.module.rnn[-1].
     for epoch in range(epochs):
         loss_avg = []
         progress = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))

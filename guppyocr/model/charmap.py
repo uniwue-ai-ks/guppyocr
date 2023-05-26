@@ -19,6 +19,13 @@ def load_charmap(cmap: Path):
         char2id = dict(zip(charmap, itertools.count()))
         return CharMap(charmap,char2id=char2id,id2char=id2char)
 
+def save_charmap(out_path: Path, cmap: CharMap):
+    json_content = {"charmap": cmap}
+
+    import json
+    with open(out_path, "w") as f:
+        f.write((json.dumps(json_content)))
+
 
 def make_charmap_from_input_dirs(dirs: List[str]) -> CharMap:
     all_chars = set()
@@ -44,8 +51,5 @@ if __name__ == "__main__":
 
     charmap = make_charmap_from_input_dirs([args.src]).charmap
 
-    json_content= {"charmap": charmap}
+    save_charmap(args.out, charmap)
 
-    import json
-    with open(args.out,"w") as f:
-        f.write((json.dumps(json_content)))

@@ -1,7 +1,7 @@
-from guppyocr.model.network import CalamariNetv2, CRNN, CRNNTiny, STNCRNN
+from guppyocr.model.network import CalamariNetv2, CRNN, CRNNTiny, STNCRNN, TrCRNN
 from dataclasses import dataclass
 import dataclasses
-from typing import Union
+from typing import Union, Dict, Optional
 from typing import BinaryIO, IO, Tuple, List
 import os
 import torch
@@ -42,6 +42,8 @@ class ModelConfiguration:
             return CRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         elif mconfig.arch == "stncrnn":
             return STNCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
+        elif mconfig.arch == "trcrnn":
+            return TrCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         else:
             raise KeyError(f"invalid model specified: {mconfig.arch}")
 
@@ -52,5 +54,61 @@ class ModelConfiguration:
         config = ModelConfiguration(mconfig)
         model = config.make_model(device)
         model.load_state_dict(ndict["model_state"], strict=False)
-        model = torch.nn.DataParallel(model).to(device)
+        model = model.to(device)
+        #model = torch.nn.DataParallel(model).to(device)
         return config, model
+
+
+
+@dataclass
+class AdjustVocResult:
+    voc: List[str]
+    char2id: Dict[str,int]
+    id2char: Dict[int,str]
+
+    mconfig: ModelConfiguration
+    model: nn.Module
+    new_chars: Optional[List] = None
+
+
+
+def adjust_voc_model(new_voc, mconfig: ModelConfiguration, model, device) -> Tuple[bool, AdjustVocResult]:
+    if mconfig.mconfig.arch != "crnn":
+        raise NotImplementedError()
+    old_voc_set = set(mconfig.mconfig.voc)
+    new_voc_set = set(new_voc)
+    if new_voc_set.issubset(old_voc_set):
+        return False, AdjustVocResult(
+            voc=mconfig.mconfig.voc,
+            char2id=mconfig.mconfig.char2id,
+            id2char=mconfig.mconfig.id2char,
+            mconfig=mconfig,
+            model=model)
+    else:
+        # make a new voc, char2id and id2char
+        difference = list(new_voc_set.difference(old_voc_set))
+        print("Charset in model differ. New chars to add: ", difference)
+        new_voc = mconfig.mconfig.voc + difference
+        char2id = {x:i for i,x in enumerate(new_voc)}
+        id2char = {i:x for i,x in enumerate(new_voc)}
+        mconfig.mconfig.voc = new_voc
+        mconfig.mconfig.id2char = id2char
+        mconfig.mconfig.char2id = char2id
+        model: CRNN
+        model.output_classes = len(new_voc)
+        old_layer = model.rnn[-1].embedding
+        new_layer = nn.Linear(old_layer.in_features,model.output_classes)
+        model.rnn[-1].embedding = new_layer
+        model = model.to(device)
+        print(f"Replaced output layer in model from {old_layer.out_features} to {new_layer.out_features} characters")
+
+
+
+        return True, AdjustVocResult(
+            voc=new_voc,
+            char2id=char2id,
+            id2char=id2char,
+            mconfig=mconfig,
+            model=model,
+            new_chars=list(difference)
+        )
