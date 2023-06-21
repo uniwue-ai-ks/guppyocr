@@ -65,7 +65,7 @@ class CutoutSample:
     tl: TextLine
 
 
-def extract_textline_image(img: np.ndarray, poly: np.ndarray, extraction_settings: PolyExtractionSettings) -> PIL.Image:
+def extract_textline_image(img: np.ndarray, poly: np.ndarray, extraction_settings: PolyExtractionSettings) -> PIL.Image.Image:
     #assert len(img.shape) == 3, f"Image is not in XYC format, it is {img.shape}"
 
     # get the bb of the polygon

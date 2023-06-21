@@ -1,6 +1,8 @@
+import itertools
 import random
 import sys
 from pathlib import Path
+from typing import List, Tuple
 
 import PIL.Image
 from tqdm import tqdm
@@ -15,9 +17,8 @@ from trdg.string_generator import create_strings_from_dict
 
 
 # The generators use the same arguments as the CLI, only as parameters
-
 def wordlist():
-    with open("wordlist") as f:
+    with open("/home/norbert/uni/page-segment/sar-pytorch/wordlist") as f:
         lines = [x for x in f.readlines()]
     return lines
 
@@ -74,17 +75,6 @@ for i in range(5000):
 
 random.shuffle(train_data)
 
-generator = GeneratorFromStrings(
-    train_data,
-    blur=0,
-    random_blur=True,
-    size=48,
-    skewing_angle=0,
-
-    random_skew=True,
-
-    fonts=[str(x) for x in Path("fonts_simple").iterdir()]
-)
 
 # add DIW data
 diw_lines = []
@@ -96,19 +86,118 @@ with open("diw-texts.txt") as f:
     sentences += lines[:4000]
 """
 random.shuffle(sentences)
-for i, (img, lbl) in tqdm(enumerate(generator)):    # Do something with the pillow images here.
-    fname = Path("simple_data1")/ f"{i:07}.png"
-    gt_path = Path(fname).with_suffix(".gt.txt")
-    with open(gt_path,"w") as f:
-        lbl = lbl.replace('\n', ' ')
-        lbl = lbl.replace('  ', ' ')
-        f.write(lbl)
 
-    img: PIL.Image.Image = img
-    img.save(fname,compression=1)
-    if i == 60000:
-        break
+def Sequential(fns: List[callable]):
+    def new_fn(x):
+        for f in fns:
+            x = f(x)
+        return x
+    return new_fn
 
+def OneOf(fns: Tuple[float, callable]):
+    sum_weights =  sum([x[0] for x in fns])
+    def new_fn(x):
+        rng = random.random()
+        slim = 0
+        for lim, f in fns:
+            if rng * sum_weights < lim + slim:
+                return f(x)
+            slim += lim
+        else:
+            return fns[-1][1](x)
+    return new_fn
+
+def Repeat(min: int, max: int, fn: callable):
+    def new_fn(x):
+        rng = random.randint(min,max)
+        for t in range(rng):
+            x = fn(x)
+        return x
+    return new_fn
+
+def Maybe(prob: float, fn: callable):
+    def new_fn(x):
+        rng = random.random()
+        if rng < prob:
+            return fn(x)
+        else:
+            return x
+    return new_fn
+
+
+RandomNumberGen = Sequential([
+    lambda x: str(random.randint(1,10000)),
+    OneOf([
+        (1, lambda x: x + "," + str(random.randint(1,9999))),
+        (1, lambda x: x + "." + str(random.randint(1,9999))),
+        (1, lambda x: x),
+    ])
+])
+
+RandomStringGenerator = \
+Sequential([
+    lambda x: [],
+    Repeat(1,5, OneOf([
+        (1, lambda x: x + [RandomNumberGen([])]),
+        (1, lambda x: x + [random.choice(words)]),
+        (0.2, lambda x: x + ["-"]),
+        (0.2, lambda x: x + [","])
+    ])),
+    lambda x: [y.replace("\n","") for y in x],
+    lambda x: " ".join(x),
+    lambda x: x.replace(" - ",""),
+    lambda x: x.replace(" ,", ","),
+])
+
+random.seed(12345)
+data_strings = []
+for i in tqdm(range(1000000)):
+    data_strings.append(RandomStringGenerator(None))
+
+
+fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/textgenerator/fonts/googlefonts/").iterdir()]
+
+random.shuffle(fonts)
+fonts_iter = itertools.cycle(fonts)
+
+
+for i, text in tqdm(enumerate(data_strings), total=len(data_strings)):    # Do something with the pillow images here.
+    font = next(fonts_iter)
+    gen = GeneratorFromStrings(
+        [text],
+        blur=OneOf([
+            (1,lambda x: 0),
+            (1, lambda x: 1),
+            ])(None),
+        size=48,
+        skewing_angle=OneOf([
+            (1, lambda x: 1),
+            (1, lambda x: 0)
+            ])(None),
+        random_skew=True,
+        fonts=[font],
+        margins=OneOf([
+            (1, lambda x: (5, 5, 5, 5)),
+            (1, lambda x: (3, 3, 3, 3)),
+            (1, lambda x: (1, 1, 1, 1)),
+        ])(None),
+    )
+    try:
+        img, _ = gen.next()
+        if img == None:
+            continue
+        fname = Path("/tmp/googlefontsrng/")/ f"{i:07}.png"
+        gt_path = Path(fname).with_suffix(".gt.txt")
+        with open(gt_path,"w") as f:
+            f.write(text)
+
+        img: PIL.Image.Image = img
+        img.save(fname,compression=1)
+        if i == len(data_strings):
+            break
+    except Exception as e:
+        print(f"Error genrating with font: {Path(font).name}")
+        print(e)
 
 
 if __name__ == "__main__":

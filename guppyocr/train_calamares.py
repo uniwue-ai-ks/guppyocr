@@ -207,6 +207,8 @@ if __name__ == '__main__':
     print("Creating dataset")
     train_img_path = Path(os.path.join(dataset_path, 'train'))
     test_img_path = Path(os.path.join(dataset_path, 'test'))
+    #train_img_path = Path("/tmp/tmpout.pq")
+    #test_img_path = Path("/tmp/tmpout.pq")
     reader_train = make_dataset_reader(train_img_path, opt.reader)
     reader_val = make_dataset_reader(test_img_path, opt.reader)
 
