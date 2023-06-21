@@ -29,11 +29,14 @@ dependencies = [
 ]
 
 
+[project.optional-dependencies]
+    parquet = [
+        "pyarrow~=12.0.1"
+    ]
+
 [tool.setuptools]
 packages = ["guppyocr"]
 
 
 [project.scripts]
     guppy_dump = 'guppyocr.dump:main'
-
-

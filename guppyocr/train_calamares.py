@@ -29,6 +29,7 @@ from torch import nn
 
 from guppyocr.model.charmap import make_charmap_from_input_dirs
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
+from guppyocr.ocr_dataset import make_dataset_reader
 
 
 def decode_ctc(pred, id2char) -> str:
@@ -113,6 +114,7 @@ if __name__ == '__main__':
         '--epoch', type=int, default=250, help='number of epochs')
     parser.add_argument('--output', type=str, default='str', help='output folder')
     parser.add_argument('--model', type=str, default='', help='model path for finetuning')
+    parser.add_argument('--reader', type=str, default='plain', help="Reader Module to use for reading the dataset")
     parser.add_argument('--dataset', type=str, required=True, help="dataset path")
     parser.add_argument('--gpu', type=bool, default=False, help="Use GPU")
     parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
@@ -203,10 +205,13 @@ if __name__ == '__main__':
         model = torch.nn.DataParallel(model).to(device)
 
     print("Creating dataset")
-    train_img_path = os.path.join(dataset_path, 'train')
-    test_img_path = os.path.join(dataset_path, 'test')
-    train_dataset = dataset.MySynthDataset(Height, Width, seq_len, train_img_path, char2id)
-    test_dataset = dataset.MySynthDataset(Height, Width, seq_len, test_img_path, char2id)
+    train_img_path = Path(os.path.join(dataset_path, 'train'))
+    test_img_path = Path(os.path.join(dataset_path, 'test'))
+    reader_train = make_dataset_reader(train_img_path, opt.reader)
+    reader_val = make_dataset_reader(test_img_path, opt.reader)
+
+    train_dataset = dataset.MySimpleDataset(reader_train, Height, Width, seq_len, char2id)
+    test_dataset = dataset.MySimpleDataset(reader_val, Height, Width, seq_len, char2id)
 
     # make dataloader
     train_dataloader = torch.utils.data.DataLoader(

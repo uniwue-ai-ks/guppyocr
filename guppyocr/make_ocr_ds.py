@@ -4,7 +4,7 @@ import itertools
 from dataclasses import dataclass, field
 from math import ceil, floor
 from pathlib import Path
-from typing import Iterable, Set
+from typing import Iterable, Set, Iterator
 
 import cv2
 #import h5py as h5py
@@ -16,15 +16,17 @@ import PIL
 import PIL.Image
 import PIL.ImageDraw
 from tqdm import tqdm
+from guppyocr.ocr_dataset import IDatasetWriter, PlainDatasetWriter, make_dataset_writer
 
 
 
 USAGE="""Make OCR DS
 
 Usage:
-    make_ocr_ds (pxml | json) [options] <output_dir> <images>...
+    make_ocr_ds [options] <output_path> <pagexmls>...
 
 Options:
+    --writer=WRITER     Output writer to use [default: plain]
     --prefix=PREFIX     set image prefix [default: ]
     --skip              Skip files if no Companion file is found
     --no-greek          Skip lines containing greek characters (@)
@@ -33,20 +35,13 @@ Options:
 """
 
 class FilenameEnumerator:
-    def __init__(self, prefix: str, start_count: int, suffix: str):
-        self.prefix = prefix
+    def __init__(self, start_count: int, suffix: str):
         self.count = itertools.count(start_count)
         self.suffix = suffix
 
-    def __iter__(self) -> str:
-        for x in self.count:
-            yield f"{self.prefix}_{x:07}{self.suffix}"
-
-    def __next__(self) -> str:
+    def next(self, prefix: str = None):
         x = next(self.count)
-        return f"{self.prefix}_{x:07}{self.suffix}"
-    def next_count(self):
-        return next(self.count)
+        return f"{prefix}_{x:07}{self.suffix}"
 
 class CompanionImageType(enum.Enum):
     COLOR = "color"
@@ -135,19 +130,21 @@ def main(args):
         use_companion_image=CompanionImageType.COLOR,
         use_region_polys=False
     )
-    output_path = Path(args["<output_dir>"])
+    output_path = Path(args["<output_path>"])
+    
+    writer: IDatasetWriter = make_dataset_writer(output_path, args["--writer"])
+    
     if args["--glob"]:
-        xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in args["<images>"]]))
+        xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in args["<pagexmls>"]]))
     else:
-        xml_files = list(args["<images>"])
-    for x in xml_files:
+        xml_files = list(args["<pagexmls>"])
+    for x in tqdm(xml_files):
         if args["--prefix"]:
             prefix = "_".join([args["--prefix"] or "", Path(x).with_suffix("").name])
         else:
             prefix = Path(x).with_suffix("").name
-
+        fn = FilenameEnumerator(0,"")
         try:
-            fn = FilenameEnumerator(prefix,0,".png")
             page = PageXMLParser.from_file(x,strictness=PageXMLParserMode.EASY).get_page()
             for cutout in extract_pagexml(page,Path(x),settings):
                 if args["--no-greek"] and "@" in cutout.gt_text:
@@ -158,19 +155,18 @@ def main(args):
                 lbpos = cutout.gt_text.find("↵")
                 if lbpos != -1:
                     cutout.gt_text = cutout.gt_text[:lbpos]
-                img_out_path = output_path / next(fn)
-                gt_txt_out_path = img_out_path.with_suffix(".gt.txt")
-                if img_out_path.exists():
-                    continue
-                cutout.img.save(img_out_path,compression=1)
-                with open(gt_txt_out_path, "w") as f:
-                    f.write(cutout.gt_text.strip())
+                
+                try:
+                    writer.write(str(fn.next(prefix)), cutout.img , cutout.gt_text)
+                except FileExistsError as e:
+                    print("Skipping:" + e.strerror)
+
         except CompanionFileNotFound as e:
             if args["--skip"]:
                 pass
             else:
                 raise e
-
+    writer.close()
 
 
 
