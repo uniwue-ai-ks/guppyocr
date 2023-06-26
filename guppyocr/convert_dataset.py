@@ -16,10 +16,10 @@ import PIL
 import PIL.Image
 import PIL.ImageDraw
 from tqdm import tqdm
-from guppyocr.ocr_dataset import IDatasetWriter, PlainDatasetWriter, make_dataset_writer, make_dataset_reader
+from guppyocr.ocr_dataset import make_dataset_writer, make_dataset_reader
 
 
-USAGE="""Convert OCR Ds
+USAGE="""Convert OCR Dataset
 
 Usage:
     make_ocr_ds [options] <input_path> <output_path>

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict
 
+from guppyocr.ocr_dataset import IDatasetReader
+
 
 @dataclass
 class CharMap:
@@ -26,6 +28,18 @@ def save_charmap(out_path: Path, cmap: CharMap):
     with open(out_path, "w") as f:
         f.write((json.dumps(json_content)))
 
+def make_charmap_from_readers(readers: List[IDatasetReader]) -> CharMap:
+    all_chars = set()
+    for reader in readers:
+        for i in range(len(reader)):
+            txt = reader.get_text(i)
+            for c in txt.replace("\n",""):
+                all_chars.add(c)
+
+    charmap = ["PAD"] + sorted(list(all_chars)) + ["UNK", "END"]
+    id2char = dict(zip(itertools.count(), charmap))
+    char2id = dict(zip(charmap, itertools.count()))
+    return CharMap(charmap,char2id=char2id,id2char=id2char)
 
 def make_charmap_from_input_dirs(dirs: List[str]) -> CharMap:
     all_chars = set()

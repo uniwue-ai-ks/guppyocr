@@ -18,6 +18,7 @@ class OCREngineBase(ABC):
 
 class InvalidInputImage(Exception):
     pass
+
 class GuppyOCR(OCREngineBase):
     def __init__(self, mc: ModelConfiguration, model: torch.nn.Module, device: torch.device):
         self.mc = mc
@@ -39,7 +40,7 @@ class GuppyOCR(OCREngineBase):
 
     def ocr(self, cutout: numpy.typing.ArrayLike) -> str:
         if not len(cutout.shape) == 3:
-            raise InvalidInputImage("Shape of Image cutout must be 3")
+            raise InvalidInputImage("Len of image cutout shape must be 3")
 
         img = preprocess_image(cutout, self.mc.mconfig.Width, self.mc.mconfig.Height)
         img = img[None, :, : ,:]

@@ -27,9 +27,9 @@ from guppyocr.dataset import dataset
 
 from torch import nn
 
-from guppyocr.model.charmap import make_charmap_from_input_dirs
+from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
-from guppyocr.ocr_dataset import make_dataset_reader
+from guppyocr.ocr_dataset import IDatasetReader, make_dataset_reader
 
 
 def decode_ctc(pred, id2char) -> str:
@@ -100,35 +100,53 @@ class MetricAggregator:
         pass
 
 
+@dataclass
+class TrainingOpts:
+    output: str
+    dataset: str
+    val_dataset: str = ''
+    model: str = ''
+    test_loaded_model: bool = False
 
-# main function:
-if __name__ == '__main__':
-    os.nice(10)
-    freeze_support()
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--batch', type=int, default=4, help='input batch size')
-    parser.add_argument(
-        '--worker', type=int, default=2, help='number of data loading workers')
-    parser.add_argument(
-        '--epoch', type=int, default=250, help='number of epochs')
-    parser.add_argument('--output', type=str, default='str', help='output folder')
-    parser.add_argument('--model', type=str, default='', help='model path for finetuning')
-    parser.add_argument('--reader', type=str, default='plain', help="Reader Module to use for reading the dataset")
-    parser.add_argument('--dataset', type=str, required=True, help="dataset path")
-    parser.add_argument('--gpu', type=bool, default=False, help="Use GPU")
-    parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
-    parser.add_argument('--cmap', type=str)
-    parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
-    parser.add_argument("--test", action="store_true")
+    reader: str = "plain"
+    arch: str = "crnn"
+    gpu: bool = False
+    worker: int = 2
+    epoch: int = 100
+    grad_clip: bool = False
 
-    opt = parser.parse_args()
-    print(opt)
 
-    opt.manualSeed = random.randint(1, 10000)  # fix seed
-    print("Random Seed:", opt.manualSeed)
-    random.seed(opt.manualSeed)
-    torch.manual_seed(opt.manualSeed)
+def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
+    print("Creating dataset")
+    if opt.reader == "plain":
+        train_img_path = Path(os.path.join(opt.dataset, 'train'))
+        test_img_path = Path(os.path.join(opt.dataset, 'test'))
+        if train_img_path.exists():
+            train_img_path = test_img_path = Path(opt.dataset)
+        elif not test_img_path.exists():
+            test_img_path = train_img_path
+    elif opt.reader == "pq":
+        train_img_path = Path(opt.dataset)
+        if opt.val_dataset:
+            test_img_path = Path(opt.val_dataset)
+        else:
+            test_img_path = train_img_path
+    
+    #train_img_path = Path("/tmp/tmpout.pq")
+    #test_img_path = Path("/tmp/tmpout.pq")
+    print(f"Using traing dataset: {train_img_path}")
+    print(f"Using val dataset: {test_img_path}")
+    reader_train = make_dataset_reader(train_img_path, opt.reader)
+    reader_val = make_dataset_reader(test_img_path, opt.reader)
+    return reader_train, reader_val
+
+
+
+def train_model(opt: TrainingOpts) -> Path:
+    manualSeed =  random.randint(1, 10000) # fix seed
+    print("Random Seed:", )
+    random.seed(manualSeed)
+    torch.manual_seed(manualSeed)
 
     # turn on GPU for models:
     if opt.gpu == False:
@@ -142,6 +160,18 @@ if __name__ == '__main__':
             device = torch.device("cpu")
             print("CPU being used!")
 
+
+    print(opt)
+    print("Creating Datasets")
+
+    reader_train, reader_val = make_readers(opt)
+
+    # build the vocabulary
+    cmap = make_charmap_from_readers([reader_train, reader_val])
+
+    voc, char2id, id2char = cmap.charmap, cmap.char2id, cmap.id2char
+    print("Training Vocabulary: ", voc)
+
     # set training parameters
     batch_size = 8
     Height = 48
@@ -150,12 +180,8 @@ if __name__ == '__main__':
     feature_width = Width // 8
     Channel = 3
 
-    cmap = make_charmap_from_input_dirs([str(Path(opt.dataset)/"train"),str(Path(opt.dataset)/"test")])
-    voc, char2id, id2char = cmap.charmap, cmap.char2id, cmap.id2char
-    print("Training Vocabulary: ", voc)
 
     output_classes = len(voc)
-    embedding_dim = 512
     hidden_units = 512
     layers = 2
     keep_prob = 1.0
@@ -204,14 +230,8 @@ if __name__ == '__main__':
     if torch.cuda.is_available() == True and opt.gpu == True:
         model = torch.nn.DataParallel(model).to(device)
 
-    print("Creating dataset")
-    train_img_path = Path(os.path.join(dataset_path, 'train'))
-    test_img_path = Path(os.path.join(dataset_path, 'test'))
-    #train_img_path = Path("/tmp/tmpout.pq")
-    #test_img_path = Path("/tmp/tmpout.pq")
-    reader_train = make_dataset_reader(train_img_path, opt.reader)
-    reader_val = make_dataset_reader(test_img_path, opt.reader)
 
+    print("Loading Datasets")
     train_dataset = dataset.MySimpleDataset(reader_train, Height, Width, seq_len, char2id)
     test_dataset = dataset.MySimpleDataset(reader_val, Height, Width, seq_len, char2id)
 
@@ -240,7 +260,7 @@ if __name__ == '__main__':
 
 
 
-    if opt.test and trained_model_path:
+    if opt.test_loaded_model and trained_model_path:
         print("Testing trained model")
         test_model(model, test_dataloader)
 
@@ -329,6 +349,7 @@ if __name__ == '__main__':
 
         if scheduler is not None:
             scheduler.step()
+        
         def print_val(gt, pred, id2char):
             # reverse char2id
             #id2char = {v:k for k,v in id2char.items()}
@@ -408,4 +429,43 @@ if __name__ == '__main__':
                 mconfig.save(model_output_path, state_dict)
                 print(f"Saving model as {model_output_path}")
 
-    print("Best test accuracy is:", best_acc)
+    print("Best total CER is:", best_total_cer)
+    return Path(output_path / "model_best.pth")
+
+# main function:
+if __name__ == '__main__':
+    os.nice(10)
+    freeze_support()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--worker', type=int, default=2, help='number of data loading workers')
+    parser.add_argument(
+        '--epoch', type=int, default=250, help='number of epochs')
+    parser.add_argument('--output', type=str, default='str', help='output folder')
+    parser.add_argument('--model', type=str, default='', help='model path for finetuning')
+    parser.add_argument('--reader', type=str, default='plain', help="Reader Module to use for reading the dataset")
+    parser.add_argument('--dataset', type=str, required=True, help="dataset path")
+    parser.add_argument('--gpu', type=bool, default=False, help="Use GPU")
+    parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
+    parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
+    parser.add_argument("--test_loaded_model", action="store_true")
+
+    opt = parser.parse_args()
+
+    training_opts = TrainingOpts(
+        output=opt.output,
+        dataset=opt.dataset,
+        model=opt.model,
+        test_loaded_model=opt.test_loaded_model,
+        reader=opt.reader,
+        arch=opt.arch,
+        gpu=opt.gpu,
+        worker=opt.worker,
+        epoch=opt.epoch,
+        grad_clip=opt.grad_clip
+    )
+    train_model(training_opts)
+
+
+
+    
