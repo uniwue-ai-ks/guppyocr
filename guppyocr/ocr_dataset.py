@@ -111,6 +111,7 @@ class ParquetDatasetWriter(IDatasetWriter):
             #    data = []
 
     def write(self, key: str, image: Union[PIL.Image.Image, np.ndarray], text: str):
+        import pyarrow as pa
         if not isinstance(image, PIL.Image.Image):
             image = PIL.Image.fromarray(image)
         with io.BytesIO() as bio:
@@ -133,19 +134,27 @@ class ParquetDatasetReader(IDatasetReader):
    
     def get_image(self, idx: int) -> np.ndarray:
         rg = self.pa_file.read_row_group(idx)
-        img = cv2.imread(str((self.root_dir / self.files[idx]).with_suffix("").with_suffix(".png")))
+        img_buffer = rg[1][0].as_buffer()
+        img_buffer_np = np.frombuffer(img_buffer, dtype=np.uint8)
+        img = cv2.imdecode(img_buffer_np, cv2.IMREAD_COLOR)
         return img
 
     def get_text(self, idx: int) -> str:
-        with open((self.root_dir / self.files[idx])) as f:
-            return f.read()
+        rg = self.pa_file.read_row_group(idx)
+        txt = rg[0][0].as_py()
+        return txt
     
     def get(self, idx: int) -> Tuple[np.ndarray, str]:
-        return self.get_image(idx), self.get_text(idx)
+        rg = self.pa_file.read_row_group(idx)
+        txt = rg[0][0].as_py()
+        img_buffer = rg[1][0].as_buffer()
+        img_buffer_np = np.frombuffer(img_buffer, dtype=np.uint8)
+        img = cv2.imdecode(img_buffer_np, cv2.IMREAD_COLOR)
+        return img, txt
     
 
     def __len__(self) -> int:
-        return len(self.files)    
+        return self.num_row_groups
 
 def make_dataset_reader(path: Path, format: str = "plain") -> IDatasetReader:
     if format == "plain":
@@ -162,3 +171,15 @@ def make_dataset_writer(path: Path, format: str = "plain") -> IDatasetWriter:
         return ParquetDatasetWriter(path)
     else:
         raise NotImplementedError(f"No dataset writer for format {format}")
+
+
+if __name__=="__main__":
+    from tqdm import tqdm
+    pareader = ParquetDatasetReader("/tmp/test.pq")
+    print(pareader.list_files())
+    for x in tqdm(range(pareader.__len__())):
+        img, text = pareader.get(x)
+        print(img,text)
+
+
+    

@@ -4,7 +4,7 @@ import itertools
 from dataclasses import dataclass, field
 from math import ceil, floor
 from pathlib import Path
-from typing import Iterable, Set, Iterator
+from typing import Iterable, Set, Iterator, List
 
 import cv2
 #import h5py as h5py
@@ -123,21 +123,38 @@ def extract_pagexml(pxml: PageXMLPage, xml_path: Path, poly_extraction_settings:
         cut_image = extract_textline_image(companion_image_arr,poly,poly_extraction_settings)
         yield CutoutSample(cut_image,gt_txt, tl)
 
+def find_all_pagexmls_recursively(folder: Path) -> List[Path]:
+    pagexmls = []
+    for x in folder.iterdir():
+        if x.is_dir():
+            pagexmls += find_all_pagexmls_recursively(x)
+        elif x.suffix == ".xml":
+            pagexmls.append(x)
+    return pagexmls
 
-def main(args):
+@dataclass
+class LanguageSettings:
+    disable_greek: bool = False
+    cut_line_ending_mark: bool = True
+    filter_small_lines: int = 0
+
+def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: CompanionImageType, source_files_dirs: List[Path], glob_input: bool = False, language_settings: LanguageSettings = LanguageSettings()):
     settings = PolyExtractionSettings(
         mask_poly=False,
         use_companion_image=CompanionImageType.COLOR,
         use_region_polys=False
     )
-    output_path = Path(args["<output_path>"])
     
-    writer: IDatasetWriter = make_dataset_writer(output_path, args["--writer"])
-    
-    if args["--glob"]:
+    if glob_input:
         xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in args["<pagexmls>"]]))
     else:
-        xml_files = list(args["<pagexmls>"])
+        xml_files = []
+        for arg in source_files_dirs:
+            if arg.is_dir():
+                xml_files += find_all_pagexmls_recursively(arg)
+            elif arg.suffix == ".xml":
+                xml_files.append(arg)
+    
     for x in tqdm(xml_files):
         if args["--prefix"]:
             prefix = "_".join([args["--prefix"] or "", Path(x).with_suffix("").name])
@@ -147,17 +164,18 @@ def main(args):
         try:
             page = PageXMLParser.from_file(x,strictness=PageXMLParserMode.EASY).get_page()
             for cutout in extract_pagexml(page,Path(x),settings):
-                if args["--no-greek"] and "@" in cutout.gt_text:
+                if  language_settings.disable_greek and "@" in cutout.gt_text:
                     continue
 
-                if len(cutout.gt_text) < 3:
+                if len(cutout.gt_text) < language_settings.filter_small_lines:
                     continue
-                lbpos = cutout.gt_text.find("↵")
-                if lbpos != -1:
-                    cutout.gt_text = cutout.gt_text[:lbpos]
-                
+                if language_settings.cut_line_ending_mark:
+                    lbpos = cutout.gt_text.find("↵")
+                    if lbpos != -1:
+                        cutout.gt_text = cutout.gt_text[:lbpos]
+        
                 try:
-                    writer.write(str(fn.next(prefix)), cutout.img , cutout.gt_text)
+                    dataset_writer.write(str(fn.next(prefix)), cutout.img , cutout.gt_text)
                 except FileExistsError as e:
                     print("Skipping:" + e.strerror)
 
@@ -166,9 +184,22 @@ def main(args):
                 pass
             else:
                 raise e
-    writer.close()
+    dataset_writer.close()
 
 
+def main(args):
+    output_path = Path(args["<output_path>"])
+    
+    writer: IDatasetWriter = make_dataset_writer(output_path, args["--writer"])
+
+    make_dataset(writer, 
+        CompanionImageType.COLOR, 
+        args["<pagexmls>"],args["--glob"],
+        LanguageSettings(disable_greek=args["--no-greek"],
+                         cut_line_ending_mark=True,
+                         filter_small_lines=3
+                         )
+        )
 
 
 if __name__ == "__main__":
