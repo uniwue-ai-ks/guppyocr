@@ -430,7 +430,7 @@ def train_model(opt: TrainingOpts) -> Path:
                 print(f"Saving model as {model_output_path}")
 
     print("Best total CER is:", best_total_cer)
-    return Path(output_path / "model_best.pth")
+    return Path(output_path) / "model_best.pth"
 
 # main function:
 if __name__ == '__main__':

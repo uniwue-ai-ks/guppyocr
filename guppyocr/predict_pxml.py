@@ -54,14 +54,14 @@ class GuppyPageXMLPredictor:
         cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
         #for i, cutout in enumerate(cutouts):
         #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
-        imgs = [preprocess_cutout(x,mc.mconfig.Width, mc.mconfig.Height) for x in cutouts]
+        imgs = [preprocess_cutout(x,self.model_config.mconfig.Width, self.model_config.mconfig.Height) for x in cutouts]
 
         had_gt = False
         for img, co in zip(imgs, cutouts):
             img = img[None, :, : ,:]
             img = img.to(self.device)
-            prediction, _ , _ ,_ = model.forward(img,None)
-            decoded_tgt = decode_ctc(prediction[0], mc.mconfig.id2char)
+            prediction, _ , _ ,_ = self.model.forward(img,None)
+            decoded_tgt = decode_ctc(prediction[0], self.model_config.mconfig.id2char)
             co.tl.text_equivs[TextEquiv.TEXT_ID_PREDICTION] = TextEquiv(TextEquiv.TEXT_ID_PREDICTION,decoded_tgt)
 
         # build new pagexml
@@ -70,10 +70,9 @@ class GuppyPageXMLPredictor:
             with open(f,"w") as of:
                 of.write(build_pxml)
 
-if __name__ == "__main__":
-
+def main():
     args = docopt.docopt(USAGE)
-   
+
     if args["-d"]:
         dry_run = True
         print("Dry run, saving disabled")
@@ -133,8 +132,9 @@ if __name__ == "__main__":
             print(f"Estimated CER: {total_errors / total_chars * 100:.2f} %")
 
 
-
-
+if __name__ == "__main__":
+    main()
+  
 
 
 
