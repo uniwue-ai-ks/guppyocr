@@ -1,0 +1,164 @@
+import io
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Iterable, List, Tuple, Union
+
+import numpy as np
+import PIL
+import PIL.Image
+import cv2
+
+
+class IDatasetReader(ABC):
+    @abstractmethod
+    def list_files(self) -> Iterable[str]:
+        pass
+
+    @abstractmethod
+    def get_image(self, idx: int) -> np.ndarray:
+        pass
+
+    @abstractmethod
+    def get_text(self, idx: int) -> str:
+        pass
+
+    @abstractmethod
+    def get(self, idx: int) -> Tuple[np.ndarray, str]:
+        pass
+
+    @abstractmethod
+    def __len__(self) -> int:
+        pass
+
+
+class IDatasetWriter(ABC):
+    @abstractmethod
+    def write(self, key: str, image: np.ndarray, text: str):
+        pass
+
+    @abstractmethod
+    def close(self):
+        pass
+
+
+class PlainDatasetReader(IDatasetReader):
+    def __init__(self, root_dir: Path):
+        self.root_dir = root_dir
+        self.files = []
+        for f in self.root_dir.iterdir():
+            if f.suffix == ".txt":
+                self.files.append(f.name)
+
+    def list_files(self) -> List[str]:
+        return self.files
+            
+   
+    def get_image(self, idx: int) -> np.ndarray:
+        img = cv2.imread(str((self.root_dir / self.files[idx]).with_suffix("").with_suffix(".png")))
+        return img
+
+    def get_text(self, idx: int) -> str:
+        with open((self.root_dir / self.files[idx])) as f:
+            return f.read()
+    
+    def get(self, idx: int) -> Tuple[np.ndarray, str]:
+        return self.get_image(idx), self.get_text(idx)
+    
+
+    def __len__(self) -> int:
+        return len(self.files)
+
+class PlainDatasetWriter(IDatasetWriter):
+    def __init__(self, root_dir: Path, overwrite: bool = False):
+        self.root_dir = root_dir
+        self.overwrite = overwrite
+
+    def write(self, key: str, image: Union[PIL.Image.Image, np.ndarray], text: str):
+        fname = key
+        fname = fname.replace("/", "_")
+        fname = fname.replace(".", "_")
+        out_image_path = (self.root_dir / fname).with_suffix(".png")
+        out_gt_path = (self.root_dir / fname).with_suffix(".gt.txt")
+        if not self.overwrite:
+            # check that both files do not exists
+            if out_image_path.exists():
+                raise FileExistsError(f"Output file {out_image_path} exists")
+            if out_gt_path.exists():
+                raise FileExistsError(f"Output file {out_gt_path} exists")
+            
+        if not isinstance(image, PIL.Image.Image):
+            image = PIL.Image.fromarray(image)
+        
+        image.save(out_image_path, compression=1)
+        
+        with open(out_gt_path, "w") as f:
+            f.write(text)
+    
+    def close(self):
+        pass
+
+
+class ParquetDatasetWriter(IDatasetWriter):
+    def __init__(self, output_path: Path):
+        import pyarrow as pa
+        import pyarrow.parquet
+        self.schema = pa.schema([("gt",pa.string()), ("img",pa.binary())])
+        self.pw = pa.parquet.ParquetWriter(output_path, self.schema)
+                
+                    #data.append([cutout.gt_text.strip(),bio.getvalue()])
+            #if len(data) > 1000:
+            #    pw.write_batch(pa.record_batch(list(zip(*data)),schema=schema),row_group_size=1)
+            #    data = []
+
+    def write(self, key: str, image: Union[PIL.Image.Image, np.ndarray], text: str):
+        if not isinstance(image, PIL.Image.Image):
+            image = PIL.Image.fromarray(image)
+        with io.BytesIO() as bio:
+            image.save(bio,format="png",compression=1)
+            self.pw.write_batch(pa.RecordBatch.from_pylist([{"gt": text.strip(), "img": bio.getvalue()}],schema=self.schema))
+
+    def close(self):
+        self.pw.close()
+
+class ParquetDatasetReader(IDatasetReader):
+    def __init__(self, parquet_path: Path):
+        import pyarrow as pa
+        import pyarrow.parquet
+        self.pa_file = pa.parquet.ParquetFile(parquet_path)
+        self.num_row_groups = self.pa_file.num_row_groups
+
+    def list_files(self) -> List[str]:
+        return list(map(str,range(self.num_row_groups)))
+            
+   
+    def get_image(self, idx: int) -> np.ndarray:
+        rg = self.pa_file.read_row_group(idx)
+        img = cv2.imread(str((self.root_dir / self.files[idx]).with_suffix("").with_suffix(".png")))
+        return img
+
+    def get_text(self, idx: int) -> str:
+        with open((self.root_dir / self.files[idx])) as f:
+            return f.read()
+    
+    def get(self, idx: int) -> Tuple[np.ndarray, str]:
+        return self.get_image(idx), self.get_text(idx)
+    
+
+    def __len__(self) -> int:
+        return len(self.files)    
+
+def make_dataset_reader(path: Path, format: str = "plain") -> IDatasetReader:
+    if format == "plain":
+        return PlainDatasetReader(path)
+    elif format == "pq":
+        return ParquetDatasetReader(path)
+    else:
+        raise NotImplementedError(f"No dataset reader for format {format}")
+
+def make_dataset_writer(path: Path, format: str = "plain") -> IDatasetWriter:
+    if format == "plain":
+        return PlainDatasetWriter(path)
+    elif format == "pq":
+        return ParquetDatasetWriter(path)
+    else:
+        raise NotImplementedError(f"No dataset writer for format {format}")
