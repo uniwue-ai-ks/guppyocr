@@ -8,7 +8,7 @@ import docopt
 import editdistance
 import numpy as np
 import torch
-from libpagexml3.libpagexml3 import PageXMLParser, PageXMLParserMode, TextEquiv, PageXMLBuilder
+from libpagexml3.libpagexml3 import PageXMLParser, PageXMLParserMode, TextEquiv, PageXMLBuilder, PageXMLPage
 from tqdm import tqdm
 
 from guppyocr.dataset.dataset import resize_with_pad
@@ -41,10 +41,39 @@ def preprocess_cutout(co: CutoutSample, width, height) -> torch.Tensor:
     IMG = np.array(IMG)
     return preprocess_image(IMG,width,height)
 
+
+
+class GuppyPageXMLPredictor:
+    def __init__(self, model_path: Path) -> None:
+         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+         self.dry_run = False
+         self.model_config, self.model = ModelConfiguration.load_model(model_path, self.device)
+
+    def predict_pagexml(self, f: Path):
+        page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()
+        cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
+        #for i, cutout in enumerate(cutouts):
+        #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
+        imgs = [preprocess_cutout(x,mc.mconfig.Width, mc.mconfig.Height) for x in cutouts]
+
+        had_gt = False
+        for img, co in zip(imgs, cutouts):
+            img = img[None, :, : ,:]
+            img = img.to(self.device)
+            prediction, _ , _ ,_ = model.forward(img,None)
+            decoded_tgt = decode_ctc(prediction[0], mc.mconfig.id2char)
+            co.tl.text_equivs[TextEquiv.TEXT_ID_PREDICTION] = TextEquiv(TextEquiv.TEXT_ID_PREDICTION,decoded_tgt)
+
+        # build new pagexml
+        if not self.dry_run:
+            build_pxml = PageXMLBuilder.build_pagexml(page,"GuppyOcr")
+            with open(f,"w") as of:
+                of.write(build_pxml)
+
 if __name__ == "__main__":
 
     args = docopt.docopt(USAGE)
-    device = torch.device("cuda")
+   
     if args["-d"]:
         dry_run = True
         print("Dry run, saving disabled")
