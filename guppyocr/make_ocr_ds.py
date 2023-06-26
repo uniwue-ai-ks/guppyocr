@@ -138,7 +138,7 @@ class LanguageSettings:
     cut_line_ending_mark: bool = True
     filter_small_lines: int = 0
 
-def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: CompanionImageType, source_files_dirs: List[Path], glob_input: bool = False, language_settings: LanguageSettings = LanguageSettings()):
+def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: CompanionImageType, source_files_dirs: List[Path], glob_input: bool = False, language_settings: LanguageSettings = LanguageSettings(), ds_prefix: str = ''):
     settings = PolyExtractionSettings(
         mask_poly=False,
         use_companion_image=CompanionImageType.COLOR,
@@ -146,7 +146,7 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
     )
     
     if glob_input:
-        xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in args["<pagexmls>"]]))
+        xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in source_files_dirs]))
     else:
         xml_files = []
         for arg in source_files_dirs:
@@ -156,8 +156,8 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
                 xml_files.append(arg)
     
     for x in tqdm(xml_files):
-        if args["--prefix"]:
-            prefix = "_".join([args["--prefix"] or "", Path(x).with_suffix("").name])
+        if ds_prefix:
+            prefix = "_".join([ds_prefix, Path(x).with_suffix("").name])
         else:
             prefix = Path(x).with_suffix("").name
         fn = FilenameEnumerator(0,"")
@@ -180,10 +180,7 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
                     print("Skipping:" + e.strerror)
 
         except CompanionFileNotFound as e:
-            if args["--skip"]:
-                pass
-            else:
-                raise e
+            print(f"Skipping {x} (no companion file)")
     dataset_writer.close()
 
 
