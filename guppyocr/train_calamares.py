@@ -114,6 +114,7 @@ class TrainingOpts:
     worker: int = 2
     epoch: int = 100
     grad_clip: bool = False
+    early_stopping = 1000000
 
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
@@ -277,7 +278,8 @@ def train_model(opt: TrainingOpts) -> Path:
 
     print("Beginning training")
     best_total_cer = float("inf")
-#    model.module.rnn[-1].
+#   model.module.rnn[-1].
+    epochs_without_improvement = 0
     for epoch in range(epochs):
         loss_avg = []
         progress = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
@@ -428,6 +430,12 @@ def train_model(opt: TrainingOpts) -> Path:
                 model_output_path = Path(output_path) / "model_best.pth"
                 mconfig.save(model_output_path, state_dict)
                 print(f"Saving model as {model_output_path}")
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+            
+            if epochs_without_improvement > opt.early_stopping:
+                break
 
     print("Best total CER is:", best_total_cer)
     return Path(output_path) / "model_best.pth"
