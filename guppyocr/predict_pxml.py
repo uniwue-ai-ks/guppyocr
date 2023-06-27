@@ -50,25 +50,26 @@ class GuppyPageXMLPredictor:
          self.model_config, self.model = ModelConfiguration.load_model(model_path, self.device)
 
     def predict_pagexml(self, f: Path):
-        page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()
-        cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
-        #for i, cutout in enumerate(cutouts):
-        #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
-        imgs = [preprocess_cutout(x,self.model_config.mconfig.Width, self.model_config.mconfig.Height) for x in cutouts]
+        with torch.set_grad_enabled(False):
+            page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()
+            cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
+            #for i, cutout in enumerate(cutouts):
+            #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
+            imgs = [preprocess_cutout(x,self.model_config.mconfig.Width, self.model_config.mconfig.Height) for x in cutouts]
 
-        had_gt = False
-        for img, co in zip(imgs, cutouts):
-            img = img[None, :, : ,:]
-            img = img.to(self.device)
-            prediction, _ , _ ,_ = self.model.forward(img,None)
-            decoded_tgt = decode_ctc(prediction[0], self.model_config.mconfig.id2char)
-            co.tl.text_equivs[TextEquiv.TEXT_ID_PREDICTION] = TextEquiv(TextEquiv.TEXT_ID_PREDICTION,decoded_tgt)
+            had_gt = False
+            for img, co in zip(imgs, cutouts):
+                img = img[None, :, : ,:]
+                img = img.to(self.device)
+                prediction, _ , _ ,_ = self.model.forward(img,None)
+                decoded_tgt = decode_ctc(prediction[0], self.model_config.mconfig.id2char)
+                co.tl.text_equivs[TextEquiv.TEXT_ID_PREDICTION] = TextEquiv(TextEquiv.TEXT_ID_PREDICTION,decoded_tgt)
 
-        # build new pagexml
-        if not self.dry_run:
-            build_pxml = PageXMLBuilder.build_pagexml(page,"GuppyOcr")
-            with open(f,"w") as of:
-                of.write(build_pxml)
+            # build new pagexml
+            if not self.dry_run:
+                build_pxml = PageXMLBuilder.build_pagexml(page,"GuppyOcr")
+                with open(f,"w") as of:
+                    of.write(build_pxml)
 
 def main():
     args = docopt.docopt(USAGE)
