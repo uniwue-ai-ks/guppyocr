@@ -46,8 +46,9 @@ def preprocess_cutout(co: CutoutSample, width, height) -> torch.Tensor:
 class GuppyPageXMLPredictor:
     def __init__(self, model_path: Path, dry_run: bool = False) -> None:
          self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-         self.dry_run = False
+         self.dry_run = dry_run
          self.model_config, self.model = ModelConfiguration.load_model(model_path, self.device)
+         self.model.eval()
 
     def predict_pagexml(self, f: Path):
         with torch.set_grad_enabled(False):

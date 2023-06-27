@@ -453,6 +453,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='', help='model path for finetuning')
     parser.add_argument('--reader', type=str, default='plain', help="Reader Module to use for reading the dataset")
     parser.add_argument('--dataset', type=str, required=True, help="dataset path")
+    parser.add_argument('--val_dataset', type=str, required=False, help="validation dataset path")
     parser.add_argument('--gpu', type=bool, default=False, help="Use GPU")
     parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
     parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
@@ -463,6 +464,7 @@ if __name__ == '__main__':
     training_opts = TrainingOpts(
         output=opt.output,
         dataset=opt.dataset,
+        val_dataset=opt.val_dataset,
         model=opt.model,
         test_loaded_model=opt.test_loaded_model,
         reader=opt.reader,
