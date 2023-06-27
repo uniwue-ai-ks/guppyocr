@@ -36,7 +36,7 @@ def preprocess_image(img: np.ndarray, width, height) -> torch.Tensor:
     return IMG
 
 def preprocess_cutout(co: CutoutSample, width, height) -> torch.Tensor:
-    from dataset.dataset import resize_with_pad
+    from guppyocr.dataset.dataset import resize_with_pad
     IMG = co.img.convert("RGB")
     IMG = np.array(IMG)
     return preprocess_image(IMG,width,height)
