@@ -229,9 +229,9 @@ class CRNN(nn.Module):
         cnn.add_module('dropout0', nn.Dropout(0.3))
         self.cnn = cnn
         self.rnn = nn.Sequential(
-            BidirectionalLSTM(512, 256, 256),
+            BidirectionalLSTM(512, 128, 128),
             nn.Dropout(0.3),
-            BidirectionalLSTM(256, 128, self.output_classes))
+            BidirectionalLSTM(128, 128, self.output_classes))
         #print(self.cnn)
 
 
