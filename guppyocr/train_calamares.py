@@ -114,7 +114,7 @@ class TrainingOpts:
     worker: int = 2
     epoch: int = 100
     grad_clip: bool = False
-    early_stopping = 1000000
+    early_stopping: int = 1000000
 
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
