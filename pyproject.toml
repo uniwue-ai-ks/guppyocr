@@ -32,6 +32,12 @@ dependencies = [
 [tool.setuptools]
 packages = ["guppyocr"]
 
+[project.optional-dependencies]
+    paramsearch = [
+        "ray",
+        "pandas",
+        "optuna"
+    ]
 
 [project.scripts]
     guppy_dump = 'guppyocr.dump:main'

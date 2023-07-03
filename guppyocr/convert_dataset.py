@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from math import ceil, floor
 from pathlib import Path
 from typing import Iterable, Set, Iterator, List
+import stellaris
 
 import cv2
 #import h5py as h5py

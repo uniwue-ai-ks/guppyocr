@@ -10,7 +10,6 @@ import numpy as np
 import torch
 from libpagexml3.libpagexml3 import PageXMLParser, PageXMLParserMode, TextEquiv, PageXMLBuilder, PageXMLPage
 from tqdm import tqdm
-
 from guppyocr.dataset.dataset import resize_with_pad
 from guppyocr.make_ocr_ds import extract_pagexml, PolyExtractionSettings, CutoutSample
 from guppyocr.train_calamares import ModelParameters, ModelConfiguration, decode_ctc
@@ -41,7 +40,10 @@ def preprocess_cutout(co: CutoutSample, width, height) -> torch.Tensor:
     IMG = np.array(IMG)
     return preprocess_image(IMG,width,height)
 
-
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
 
 class GuppyPageXMLPredictor:
     def __init__(self, model_path: Path, dry_run: bool = False) -> None:
@@ -50,15 +52,14 @@ class GuppyPageXMLPredictor:
          self.model_config, self.model = ModelConfiguration.load_model(model_path, self.device)
          self.model.eval()
 
-    def predict_pagexml(self, f: Path):
+    def predict_pagexml(self, f: Path) -> PageXMLPage:
         with torch.set_grad_enabled(False):
             page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()
             cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
             #for i, cutout in enumerate(cutouts):
             #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
             imgs = [preprocess_cutout(x,self.model_config.mconfig.Width, self.model_config.mconfig.Height) for x in cutouts]
-
-            had_gt = False
+        
             for img, co in zip(imgs, cutouts):
                 img = img[None, :, : ,:]
                 img = img.to(self.device)
@@ -71,6 +72,7 @@ class GuppyPageXMLPredictor:
                 build_pxml = PageXMLBuilder.build_pagexml(page,"GuppyOcr")
                 with open(f,"w") as of:
                     of.write(build_pxml)
+            return page
 
 def main():
     args = docopt.docopt(USAGE)

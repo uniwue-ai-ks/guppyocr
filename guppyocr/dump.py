@@ -1,5 +1,4 @@
 from docopt import docopt
-
 from train_calamares import ModelConfiguration
 from dataclasses import asdict
 
@@ -18,6 +17,7 @@ def main():
     for k,v in asdict(mc.mconfig).items():
         print(f"{k.ljust(maxlen+2)} {v}")
 
+    
 if __name__ == "__main__":
     main()
 

@@ -3,9 +3,9 @@ import random
 import sys
 from pathlib import Path
 from typing import List, Tuple
-
 import PIL.Image
 from tqdm import tqdm
+import stellaris
 
 from trdg.generators import (
     GeneratorFromDict,

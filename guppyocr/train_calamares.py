@@ -113,8 +113,12 @@ class TrainingOpts:
     gpu: bool = False
     worker: int = 2
     epoch: int = 100
-    grad_clip: bool = False
     early_stopping: int = 1000000
+
+    optimizer: str = "AdaBelief" # Alternative SGD, Adam, AdaBelief
+    lr: float = 0.001
+    grad_clip: bool = False
+    batch_size: int = 8
 
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
@@ -174,7 +178,7 @@ def train_model(opt: TrainingOpts) -> Path:
     print("Training Vocabulary: ", voc)
 
     # set training parameters
-    batch_size = 8
+    batch_size = opt.batch_size
     Height = 48
     Width = 640
     feature_height = Height // 4
@@ -265,9 +269,17 @@ def train_model(opt: TrainingOpts) -> Path:
         print("Testing trained model")
         test_model(model, test_dataloader)
 
-    #optimizer = optim.Adam(model.parameters(), lr=0.001)
-    optimizer = AdaBelief(model.parameters(), print_change_log=False)
-    #optimizer = SGD(model.parameters(),lr=0.001)
+    #
+    if opt.optimizer == "AdaBelief":
+        optimizer = AdaBelief(model.parameters(), print_change_log=False,lr=opt.lr)
+    elif opt.optimizer == "Adam":
+        import torch.optim as optim
+        optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+    elif opt.optimizer == "SGD":
+        import torch.optim as optim
+        optimizer = optim.SGD(model.parameters(),lr=opt.lr)
+    else:
+        raise RuntimeError("Invalid optimizer specified")
     lmbda = lambda epoch: 0.9**(epoch // 300) if epoch < 100 else 10**(-2)
     if False:
         scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda)
