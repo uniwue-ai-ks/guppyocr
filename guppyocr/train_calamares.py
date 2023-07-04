@@ -117,7 +117,7 @@ class TrainingOpts:
 
     optimizer: str = "AdaBelief" # Alternative SGD, Adam, AdaBelief
     lr: float = 0.001
-    grad_clip: bool = False
+    grad_clip: bool = True
     batch_size: int = 8
 
 
@@ -126,7 +126,7 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
     if opt.reader == "plain":
         train_img_path = Path(os.path.join(opt.dataset, 'train'))
         test_img_path = Path(os.path.join(opt.dataset, 'test'))
-        if train_img_path.exists():
+        if not train_img_path.exists():
             train_img_path = test_img_path = Path(opt.dataset)
         elif not test_img_path.exists():
             test_img_path = train_img_path
@@ -172,7 +172,7 @@ def train_model(opt: TrainingOpts) -> Path:
     reader_train, reader_val = make_readers(opt)
 
     # build the vocabulary
-    cmap = make_charmap_from_readers([reader_train, reader_val])
+    cmap, max_seq_len_ds = make_charmap_from_readers([reader_train, reader_val])
 
     voc, char2id, id2char = cmap.charmap, cmap.char2id, cmap.id2char
     print("Training Vocabulary: ", voc)
@@ -196,6 +196,10 @@ def train_model(opt: TrainingOpts) -> Path:
     dataset_path = opt.dataset
     output_path = opt.output
     trained_model_path = opt.model
+
+    if max_seq_len_ds > seq_len:
+        seq_len = max_seq_len_ds + 2
+        print(f"Warning: Changing Max Sequence Length to: {seq_len}")
 
     if not Path(output_path).exists():
         print(f"Creating output directory: {output_path}")
@@ -297,7 +301,6 @@ def train_model(opt: TrainingOpts) -> Path:
         progress = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         for i, data in progress:
             x = data[0] # [batch_size, Channel, Height, Width]
-
             y = data[1] # [batch_size, seq_len, output_classes]
             x, y = x.to(device), y.to(device)
             #show_images([x[0].cpu().permute(1,2,0).numpy()], ["Hello"])
@@ -333,11 +336,21 @@ def train_model(opt: TrainingOpts) -> Path:
             target_lengths = target_firstpad
             #print("Inp Len: ", input_lengths)
             #print("Target Len: ", target_lengths)
-            loss = nn.CTCLoss(blank=char2id["PAD"],reduction="sum").forward(log_probs=predict_softmax,
+            loss = nn.CTCLoss(blank=char2id["PAD"],reduction="sum", zero_infinity=True).forward(log_probs=predict_softmax,
                                                             targets=target,
                                                             input_lengths=input_lengths,
                                                             target_lengths=target_lengths)
             loss_avg.append(float(loss))
+
+            #from torch.nn.functional import ctc_loss
+            #print("test")
+            #print(ctc_loss(
+            #    torch.as_tensor([[0.0,0.0,1.0],[0.0,0.0,1.0],[0.0,0.0,1.0],[0.0,1.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]]),
+            #    torch.as_tensor([2,1,1,2]),
+            #    torch.as_tensor([6]),
+            #    torch.as_tensor([4])))
+
+            
 
 
             loss.backward()

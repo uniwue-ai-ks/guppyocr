@@ -165,10 +165,12 @@ class MySimpleDataset(data.Dataset):
             y_true[i] = int(index)
         if self.putend:
             y_true[-1] = self.char2id['END'] # if requested, put END at the back
-        y_true = y_true.astype(int)
+        y_true = y_true.reshape(-1).astype(int)
         # one hot
         y_onehot = np.eye(self.output_classes)[y_true]  # [seq_len, output_classes]
-
+        #for seq_i in range(self.seq_len):
+        #    if sum(y_onehot[seq_i,:]) != 1:
+        #        print("Oh no")
         return IMG, torch.FloatTensor(y_onehot)
 
     def __len__(self):
