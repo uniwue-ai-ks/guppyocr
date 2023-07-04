@@ -16,6 +16,7 @@ from ray.tune.search.optuna import OptunaSearch
 
 TRAIN_DATASET = os.environ.get("TRAIN_DS") or "/tmp/train_ds.pq"
 VAL_DATASET = os.environ.get("VAL_DS") or ""
+EXP_NAME = os.environ.get("EXP_NAME") or "guppy_experiment"
 
 PXML_TEST_DATASETS = ["/tmp/TestDS"]
 OUTPUT_PATH=""
@@ -84,11 +85,14 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
         ),
         run_config=air.RunConfig(
             stop={"training_iteration": 5},
+            name=EXP_NAME
         ),
         param_space=search_space,
     )
     results = tuner.fit()
     print("Best config is:", results.get_best_result().config)
+    print("Results:")
+    print(results)
 
 if __name__ == "__main__":
     main(num_samples=2, max_num_epochs=2, gpus_per_trial=0)
