@@ -205,20 +205,20 @@ def train_model(opt: TrainingOpts) -> Path:
         print(f"Creating output directory: {output_path}")
         os.makedirs(output_path,exist_ok=True)
 
-    # create model
-    print("Create model......")
+    
+    print("Creating model...")
     mconfig = ModelConfiguration(ModelParameters(Height,Width,Channel,feature_height,feature_width,seq_len,opt.arch,hidden_units,layers,keep_prob,voc,char2id,id2char,False))
 
 
     if trained_model_path != '':
-        print("Loading Trained Model")
+        print("Loading Trained Model Weights")
         mconfig, model = ModelConfiguration.load_model(trained_model_path,device)
 
         did_ajust, result = adjust_voc_model(voc,mconfig,model, device)
         mconfig, model = result.mconfig, result.model
 
         if did_ajust:
-            print("Adjusted model encoding... More training is required")
+            print("Adjusted model encoding. More training is required")
 
         voc = mconfig.mconfig.voc
         id2char = mconfig.mconfig.id2char
