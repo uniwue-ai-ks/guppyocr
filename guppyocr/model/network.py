@@ -178,7 +178,7 @@ class CRNNTiny(nn.Module):
 
 class CRNN(nn.Module):
 
-    def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False, dropout: float = 0.0):
+    def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False, pre_lstm_dropout: float = 0.0, inter_lstm_dropout: float = 0.0):
         super(CRNN, self).__init__()
 
         self.channel = Channel
@@ -186,7 +186,7 @@ class CRNN(nn.Module):
         self.feature_width = feature_width
         self.output_classes = output_classes
         self.seq_len = seq_len
-        self.dropout = dropout
+        #self.dropout = dropout
 
         #assert opt['imgH'] % 16 == 0, 'imgH has to be a multiple of 16'
         assert self.feature_height % 16 == 0
@@ -226,11 +226,12 @@ class CRNN(nn.Module):
                        nn.MaxPool2d((4, 2), (2, 1), (0, 1)))  # 512x2x16
 
         convRelu(6, True)  # 512x1x16
-        cnn.add_module('dropout0', nn.Dropout(0.3))
+        if pre_lstm_dropout > 0:
+            cnn.add_module('dropout0', nn.Dropout(pre_lstm_dropout))
         self.cnn = cnn
         self.rnn = nn.Sequential(
             BidirectionalLSTM(512, 128, 128),
-            nn.Dropout(0.3),
+            nn.Dropout(inter_lstm_dropout) if inter_lstm_dropout > 0 else nn.Identity(),
             BidirectionalLSTM(128, 128, self.output_classes))
         #print(self.cnn)
 

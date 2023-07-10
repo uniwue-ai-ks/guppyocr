@@ -93,6 +93,7 @@ class MySynthDataset(data.Dataset):
             IMG = img_name
         else:
             IMG = load_image(img_name, self.width, self.height)
+
         y_true = np.ones(self.seq_len,dtype=np.int32)*int(self.char2id['PAD'])
         # label processing
         for i, c in enumerate(label):
@@ -116,9 +117,9 @@ class MySynthDataset(data.Dataset):
         self.dataset = self.dataset[:new_len]
         return self
 
-
+import albumentations as A
 class MySimpleDataset(data.Dataset):
-    def __init__(self, dataset_reader: IDatasetReader, height, width, seq_len, char2id, putend: bool = False):
+    def __init__(self, dataset_reader: IDatasetReader, height, width, seq_len, char2id, putend: bool = False, augment:bool = False):
         '''
         height: input height to model
         width: input width to model
@@ -146,13 +147,28 @@ class MySimpleDataset(data.Dataset):
                 else:
                     gt = self.reader.get_text(i)
                     self.dataset.append((i, gt))
-
+        if augment:
+            self.transform= A.OneOf([
+                A.Compose([]),
+                A.Compose([
+                    A.CLAHE(),
+                    A.Blur(blur_limit=3),
+                    A.GridDistortion(),
+                    A.ToGray(),
+                    A.MultiplicativeNoise(multiplier=(0.7,1.3))
+                    ])
+                ],p=1.0)
+            self.augment =augment
+        else:
+            self.augment = None
     def __getitem__(self, index):
         img_name, label = self.dataset[index]
         if self.load_images_to_memory:
             IMG = img_name
         else:
             img = self.reader.get_image(img_name)
+            if self.augment:
+                img = self.transform(image=img)["image"]
             IMG = transform_image(img, self.width, self.height)
         
         y_true = np.ones(self.seq_len,dtype=np.int32)*int(self.char2id['PAD'])

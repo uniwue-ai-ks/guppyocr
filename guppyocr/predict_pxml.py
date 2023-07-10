@@ -17,7 +17,7 @@ from guppyocr.train_calamares import ModelParameters, ModelConfiguration, decode
 USAGE="""predict
 
 Usage:
-    predict.py [-d] [--output_dir=DIR] [--glob] --model=MODEL <pagexml>...
+    predict_pxml.py [-d] [--output_dir=DIR] [--glob] --model=MODEL <pagexml>...
 
 Options:
     -d                  Dry run. Do not save
@@ -76,7 +76,7 @@ class GuppyPageXMLPredictor:
 
 def main():
     args = docopt.docopt(USAGE)
-
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     if args["-d"]:
         dry_run = True
         print("Dry run, saving disabled")
@@ -93,11 +93,11 @@ def main():
     with torch.no_grad():
         for f in tqdm(pagexmls):
             page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()
-            companion = Path(f).with_suffix(".png")
-
             cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
+
             #for i, cutout in enumerate(cutouts):
             #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
+
             imgs = [preprocess_cutout(x,mc.mconfig.Width, mc.mconfig.Height) for x in cutouts]
 
             had_gt = False
@@ -126,14 +126,16 @@ def main():
 
             # build new pagexml
             if not dry_run:
-                build_pxml = PageXMLBuilder.build_pagexml(page,"calamares OCR")
+                build_pxml = PageXMLBuilder.build_pagexml(page,f"GuppyOCR ({mc.mconfig.arch})")
                 output_fname = f
                 if args["--output_dir"]:
                     output_fname = Path(args["--output_dir"]) / Path(f).name
-                with open(f,"w") as of:
+                with open(output_fname,"w") as of:
                     of.write(build_pxml)
         if total_chars > 0:
             print(f"Estimated CER: {total_errors / total_chars * 100:.2f} %")
+        else:
+            print(f"Estimated CER: unknown (no GT found)")
 
 
 if __name__ == "__main__":

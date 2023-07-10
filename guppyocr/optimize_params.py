@@ -41,37 +41,38 @@ def objective(config):
     # make a temporary directory
     with tempfile.TemporaryDirectory() as tmpdir:
         from guppyocr.train_calamares import TrainingOpts, train_model
-        opts = TrainingOpts(output=tmpdir,dataset=str(TRAIN_DATASET),val_dataset=str(VAL_DATASET),reader="pq",arch="crnn",gpu=True,lr=config["lr"],optimizer=config["optimizer"], batch_size=config["batch_size"], early_stopping=3, epoch=30)
-        trained_model_path = train_model(opts)
-        if trained_model_path.exists():
-            pass
-            #shutil.copy2(trained_model_path, model_output_path)
-            # TODO: Write model to OUTPUT_PATH Using a Unique name
+        opts = TrainingOpts(output=tmpdir,dataset=str(TRAIN_DATASET),val_dataset=str(VAL_DATASET),reader="pq",arch="crnn",gpu=True,lr=config["lr"],optimizer=config["optimizer"], batch_size=config["batch_size"], early_stopping=3, epoch=30,augment=config["augment"])
+        train_res = train_model(opts)
+        #shutil.copy2(trained_model_path, model_output_path)
 
         # load the model
-        predictor = GuppyPageXMLPredictor(trained_model_path,dry_run=True)
+        if PXML_TEST_DATASETS:
+            predictor = GuppyPageXMLPredictor(train_res.best_model_path,dry_run=True)
 
-        # evaluate the model
-        cer_s = []
-        for test_dataset in PXML_TEST_DATASETS:
-            total_chars = 0
-            total_erros = 0
-            for f in Path(test_dataset).iterdir():
-                if f.suffix == ".xml":
-                    page = predictor.predict_pagexml(f)
-                    chars, errs = eval_pagexml(page)
-                    total_chars += chars
-                    total_erros += errs
-            if total_chars > 0:
-                cer_s += total_erros / total_chars
-        session.report({"mean_cer":sum(cer_s) / max(1,len(cer_s))})
+            # evaluate the model
+            cer_s = []
+            for test_dataset in PXML_TEST_DATASETS:
+                total_chars = 0
+                total_erros = 0
+                for f in Path(test_dataset).iterdir():
+                    if f.suffix == ".xml":
+                        page = predictor.predict_pagexml(f)
+                        chars, errs = eval_pagexml(page)
+                        total_chars += chars
+                        total_erros += errs
+                if total_chars > 0:
+                    cer_s += total_erros / total_chars
+            session.report({"mean_cer":sum(cer_s) / max(1,len(cer_s))})
+        else:
+            session.report({"mean_cer":train_res.best_val_cer})
 
 def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
     search_space = {
         "lr": tune.loguniform(1e-5, 1e-3),
-        "batch_size": tune.choice([2, 4, 8, 16, 32, 48]),
+        "batch_size": tune.choice([2, 4, 8, 16, 32]),
         "optimizer": tune.choice(["SGD","Adam", "AdaBelief"]),
-        "arch": tune.choice(["crnn","calamari"])
+        "arch": tune.choice(["crnn","calamari"]),
+        "augment": tune.choice([True,False])
     }
 
     algo = OptunaSearch()
@@ -84,7 +85,7 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=2):
             search_alg=algo,max_concurrent_trials=1
         ),
         run_config=air.RunConfig(
-            stop={"training_iteration": 5},
+            stop={"time_budget_s": 3600* 10},
             name=EXP_NAME
         ),
         param_space=search_space,

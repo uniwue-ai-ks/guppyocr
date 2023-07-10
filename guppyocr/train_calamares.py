@@ -3,7 +3,7 @@ THis is the main training code.
 '''
 import itertools
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
@@ -26,6 +26,7 @@ from torch.multiprocessing import freeze_support
 from guppyocr.dataset import dataset
 
 from torch import nn
+from guppyocr.dataset.augmentation import AugmentedDataset
 
 from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
@@ -111,7 +112,7 @@ class TrainingOpts:
     reader: str = "plain"
     arch: str = "crnn"
     gpu: bool = False
-    worker: int = 2
+    worker: int = 4
     epoch: int = 100
     early_stopping: int = 1000000
 
@@ -119,6 +120,8 @@ class TrainingOpts:
     lr: float = 0.001
     grad_clip: bool = True
     batch_size: int = 8
+    test_ignore_chars: List[str] = field(default_factory=lambda: ['@',' '])
+    augment: bool = False
 
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
@@ -146,8 +149,12 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
     return reader_train, reader_val
 
 
+@dataclass
+class TrainingResult:
+    best_model_path: Path
+    best_val_cer: float
 
-def train_model(opt: TrainingOpts) -> Path:
+def train_model(opt: TrainingOpts) -> TrainingResult:
     manualSeed =  random.randint(1, 10000) # fix seed
     print("Random Seed:", )
     random.seed(manualSeed)
@@ -241,8 +248,12 @@ def train_model(opt: TrainingOpts) -> Path:
 
 
     print("Loading Datasets")
-    train_dataset = dataset.MySimpleDataset(reader_train, Height, Width, seq_len, char2id)
+    train_dataset = dataset.MySimpleDataset(reader_train, Height, Width, seq_len, char2id,augment=True)
     test_dataset = dataset.MySimpleDataset(reader_val, Height, Width, seq_len, char2id)
+
+    print("Length of train dataset is: ", len(train_dataset))
+    print("Length of test dataset is: ", len(test_dataset))
+    print("Number of output classes is: ", train_dataset.output_classes)
 
     # make dataloader
     train_dataloader = torch.utils.data.DataLoader(
@@ -256,17 +267,12 @@ def train_model(opt: TrainingOpts) -> Path:
         batch_size=1,
         shuffle=False,
         num_workers=int(worker))
-
-    print("Length of train dataset is: ", len(train_dataset))
-    print("Length of test dataset is: ", len(test_dataset))
-    print("Number of output classes is: ", train_dataset.output_classes)
-
+    
     # make model output folder
     try:
         os.makedirs(output_path)
     except OSError:
         pass
-
 
 
     if opt.test_loaded_model and trained_model_path:
@@ -368,11 +374,11 @@ def train_model(opt: TrainingOpts) -> Path:
             # prediction evaluation
             pred_choice = predict.max(2)[1] # [batch_size, seq_len]
 
-            progress.desc = f'[Epoch {epoch}: {i}/{num_batch}] train loss: {np.mean(loss_avg)}'
+            progress.desc = f'[Epoch {epoch}: {i}/{num_batch}] train loss: {np.mean(loss_avg):.3f}'
             #print("predict prob:", predict[0][0])
             #print("predict words:", predict_words[0])
             #print("labeled words:", labeled_words[0])
-        print("Epoch {} average loss: {:.5f} ".format(epoch, float(sum(loss_avg) / len(loss_avg))))
+        print("Epoch {} average loss: {:.5f} ".format(epoch, float(np.mean(loss_avg))))
 
         if scheduler is not None:
             scheduler.step()
@@ -406,12 +412,12 @@ def train_model(opt: TrainingOpts) -> Path:
             CER_SUM = []
             total_chars: int = 0
             errors: int = 0
-
+            model = model.eval()
             for i, data in tqdm.tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
                 x = data[0] # [batch_size, Channel, Height, Width]
                 y = data[1] # [batch_size, seq_len, output_classes]
                 x, y = x.to(device), y.to(device)
-                model = model.eval()
+                
                 predict, _, _, _ = model(x, y)
                 # prediction evaluation
                 pred_choice = predict.max(2)[1] # [batch_size, seq_len]
@@ -427,9 +433,14 @@ def train_model(opt: TrainingOpts) -> Path:
                 #    print_val(target[0], predict[0], id2char)
                 decoded_gt = decode_gt(target[0], id2char)
                 decoded_tgt = decode_ctc(predict[0], id2char)
-                edit_distance = editdistance.distance(decoded_tgt,decoded_gt)
-                CER = edit_distance / max(1,len(decoded_gt))
-                total_chars += max(1,len(decoded_gt))
+                decoded_gt_eval = decoded_gt
+                decoded_tgt_eval = decoded_tgt
+                for c in opt.test_ignore_chars:
+                    decoded_gt_eval = decoded_gt_eval.replace(c,'')
+                    decoded_tgt_eval = decoded_tgt_eval.replace(c,'')
+                edit_distance = editdistance.distance(decoded_tgt_eval,decoded_gt_eval)
+                CER = edit_distance / max(1,len(decoded_gt_eval))
+                total_chars += max(1,len(decoded_gt_eval))
                 errors += edit_distance
                 CER_SUM.append(CER)
                 if i in print_indices:
@@ -463,7 +474,11 @@ def train_model(opt: TrainingOpts) -> Path:
                 break
 
     print("Best total CER is:", best_total_cer)
-    return Path(output_path) / "model_best.pth"
+    return TrainingResult(
+        best_model_path=Path(output_path) / "model_best.pth",
+        best_val_cer=best_total_cer
+        )
+
 
 # main function:
 if __name__ == '__main__':
@@ -483,6 +498,7 @@ if __name__ == '__main__':
     parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
     parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
     parser.add_argument("--test_loaded_model", action="store_true")
+    parser.add_argument("--augment", action="store_true")
 
     opt = parser.parse_args()
 
@@ -497,7 +513,8 @@ if __name__ == '__main__':
         gpu=opt.gpu,
         worker=opt.worker,
         epoch=opt.epoch,
-        grad_clip=opt.grad_clip
+        grad_clip=opt.grad_clip,
+        augment=opt.augment,
     )
     train_model(training_opts)
 

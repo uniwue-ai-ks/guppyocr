@@ -5,7 +5,7 @@ from typing import Union, Dict, Optional
 from typing import BinaryIO, IO, Tuple, List
 import os
 import torch
-from torch import nn
+from torch import dropout, nn
 
 @dataclass
 class ModelParameters:
@@ -23,6 +23,7 @@ class ModelParameters:
     char2id: dict
     id2char: dict
     leaky_relu: bool = False
+    dropout: float = 0.3
 
 class ModelConfiguration:
     def __init__(self, mconfig: ModelParameters):
@@ -34,12 +35,13 @@ class ModelConfiguration:
             "model_state": state_dict
         }
         torch.save(ndict, path)
+    
     def make_model(self, device):
         mconfig = self.mconfig
         if mconfig.arch == "calamari":
             return CalamariNetv2(mconfig.Channel,mconfig.Height, mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         elif mconfig.arch == "crnn":
-            return CRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
+            return CRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu,pre_lstm_dropout=mconfig.dropout, inter_lstm_dropout=mconfig.dropout)
         elif mconfig.arch == "stncrnn":
             return STNCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         elif mconfig.arch == "trcrnn":
