@@ -28,7 +28,7 @@ Options:
 
 def preprocess_image(img: np.ndarray, width, height) -> torch.Tensor:
     IMG = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
-    IMG = resize_with_pad(IMG,(width,height),(255,255,255))
+    IMG, _ = resize_with_pad(IMG,(width,height),(255,255,255))
     #IMG = cv2.resize(IMG, (width, height)) # resize
     IMG = (IMG - 127.5)/127.5 # normalization to [-1,1]
     IMG = torch.FloatTensor(IMG) # convert to tensor [H, W, C]

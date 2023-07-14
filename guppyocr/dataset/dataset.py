@@ -11,7 +11,7 @@ from guppyocr.ocr_dataset import IDatasetReader
 
 def resize_with_pad(image: np.ndarray,
                     new_shape: Tuple[int, int],
-                    padding_color: Tuple[int,int,int] = (255, 255, 255)) -> np.array:
+                    padding_color: Tuple[int,int,int] = (255, 255, 255)) -> Tuple[np.array, Tuple[float, float]]:
     """Maintains aspect ratio and resizes with padding.
     Params:
         image: Image to be resized.
@@ -40,10 +40,10 @@ def resize_with_pad(image: np.ndarray,
     left, right = 0, delta_w
     #print(image.shape, top, bottom,left,right)
     image = cv2.copyMakeBorder(image, top, bottom, left, right, cv2.BORDER_CONSTANT,None,value=padding_color)
-    return image
+    return image, (ratio, delta_w)
 
 def transform_image(img: np.ndarray, width, height):
-    IMG = resize_with_pad(img,(width,height),(255,255,255))
+    IMG, _ = resize_with_pad(img,(width,height),(255,255,255))
         #IMG = cv2.resize(IMG, (width, height)) # resize
     IMG = (IMG - 127.5)/127.5 # normalization to [-1,1]
     IMG = torch.FloatTensor(IMG) # convert to tensor [H, W, C]

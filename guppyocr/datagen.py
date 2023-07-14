@@ -22,24 +22,27 @@ def wordlist():
         lines = [x for x in f.readlines()]
     return lines
 
+
 def numbers_gen():
     if random.random() > 0.5:
-        return str(random.randint(0,10000))
+        return str(random.randint(0, 10000))
     elif random.random() < 0.6:
-        return str(random.randint(0,1000)) + "," + str(random.randint(0,99))
+        return str(random.randint(0, 1000)) + "," + str(random.randint(0, 99))
     elif random.random() < 0.5:
-        return "€" + str(random.randint(0,1000)) + "," + str(random.randint(0,99))
+        return "€" + str(random.randint(0, 1000)) + "," + str(random.randint(0, 99))
     else:
-        return str(random.randint(0,1000)) + "%"
+        return str(random.randint(0, 1000)) + "%"
+
 
 words = wordlist()
+
 
 def stupid_gen(words):
     stupid = "#-*/%."
     sentence = ""
-    for i in range(random.randint(1,4)):
+    for i in range(random.randint(1, 4)):
         if random.random() < 0.5:
-            sentence += "".join([random.choice(stupid) for _ in range(random.randint(1,8))])
+            sentence += "".join([random.choice(stupid) for _ in range(random.randint(1, 8))])
         if random.random() < 0.5:
             sentence += " "
         if random.random() < 0.5:
@@ -50,12 +53,11 @@ def stupid_gen(words):
 
 
 sentences = []
-for x in create_strings_from_dict(4,True,40000,words):
+for x in create_strings_from_dict(4, True, 40000, words):
     if random.random() < 0.7:
         sentences.append(x)
     else:
         sentences.append(x.upper())
-
 
 numbers = [numbers_gen() for x in range(1000)]
 
@@ -71,10 +73,9 @@ for i in range(5000):
     sent += " " + wl + "."
     train_data.append(sent)
 """
-#sentences += [stupid_gen(words) for _ in range(3000)]
+# sentences += [stupid_gen(words) for _ in range(3000)]
 
 random.shuffle(train_data)
-
 
 # add DIW data
 diw_lines = []
@@ -87,15 +88,19 @@ with open("diw-texts.txt") as f:
 """
 random.shuffle(sentences)
 
+
 def Sequential(fns: List[callable]):
     def new_fn(x):
         for f in fns:
             x = f(x)
         return x
+
     return new_fn
 
+
 def OneOf(fns: Tuple[float, callable]):
-    sum_weights =  sum([x[0] for x in fns])
+    sum_weights = sum([x[0] for x in fns])
+
     def new_fn(x):
         rng = random.random()
         slim = 0
@@ -105,15 +110,19 @@ def OneOf(fns: Tuple[float, callable]):
             slim += lim
         else:
             return fns[-1][1](x)
+
     return new_fn
+
 
 def Repeat(min: int, max: int, fn: callable):
     def new_fn(x):
-        rng = random.randint(min,max)
+        rng = random.randint(min, max)
         for t in range(rng):
             x = fn(x)
         return x
+
     return new_fn
+
 
 def Maybe(prob: float, fn: callable):
     def new_fn(x):
@@ -122,58 +131,57 @@ def Maybe(prob: float, fn: callable):
             return fn(x)
         else:
             return x
+
     return new_fn
 
 
 RandomNumberGen = Sequential([
-    lambda x: str(random.randint(1,10000)),
+    lambda x: str(random.randint(1, 10000)),
     OneOf([
-        (1, lambda x: x + "," + str(random.randint(1,9999))),
-        (1, lambda x: x + "." + str(random.randint(1,9999))),
+        (1, lambda x: x + "," + str(random.randint(1, 9999))),
+        (1, lambda x: x + "." + str(random.randint(1, 9999))),
         (1, lambda x: x),
     ])
 ])
 
 RandomStringGenerator = \
-Sequential([
-    lambda x: [],
-    Repeat(1,5, OneOf([
-        (1, lambda x: x + [RandomNumberGen([])]),
-        (1, lambda x: x + [random.choice(words)]),
-        (0.2, lambda x: x + ["-"]),
-        (0.2, lambda x: x + [","])
-    ])),
-    lambda x: [y.replace("\n","") for y in x],
-    lambda x: " ".join(x),
-    lambda x: x.replace(" - ",""),
-    lambda x: x.replace(" ,", ","),
-])
+    Sequential([
+        lambda x: [],
+        Repeat(1, 5, OneOf([
+            (1, lambda x: x + [RandomNumberGen([])]),
+            (1, lambda x: x + [random.choice(words)]),
+            (0.2, lambda x: x + ["-"]),
+            (0.2, lambda x: x + [","])
+        ])),
+        lambda x: [y.replace("\n", "") for y in x],
+        lambda x: " ".join(x),
+        lambda x: x.replace(" - ", ""),
+        lambda x: x.replace(" ,", ","),
+    ])
 
 random.seed(12345)
 data_strings = []
 for i in tqdm(range(1000000)):
     data_strings.append(RandomStringGenerator(None))
 
-
-fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/textgenerator/fonts/googlefonts/").iterdir()]
+fonts = [str(x) for x in Path("/home/norbert/uni/page-segment/textgenerator/fonts/googlefonts/").iterdir()]
 
 random.shuffle(fonts)
 fonts_iter = itertools.cycle(fonts)
 
-
-for i, text in tqdm(enumerate(data_strings), total=len(data_strings)):    # Do something with the pillow images here.
+for i, text in tqdm(enumerate(data_strings), total=len(data_strings)):  # Do something with the pillow images here.
     font = next(fonts_iter)
     gen = GeneratorFromStrings(
         [text],
         blur=OneOf([
-            (1,lambda x: 0),
+            (1, lambda x: 0),
             (1, lambda x: 1),
-            ])(None),
+        ])(None),
         size=48,
         skewing_angle=OneOf([
             (1, lambda x: 1),
             (1, lambda x: 0)
-            ])(None),
+        ])(None),
         random_skew=True,
         fonts=[font],
         margins=OneOf([
@@ -186,19 +194,18 @@ for i, text in tqdm(enumerate(data_strings), total=len(data_strings)):    # Do s
         img, _ = gen.next()
         if img == None:
             continue
-        fname = Path("/tmp/googlefontsrng/")/ f"{i:07}.png"
+        fname = Path("/tmp/googlefontsrng/") / f"{i:07}.png"
         gt_path = Path(fname).with_suffix(".gt.txt")
-        with open(gt_path,"w") as f:
+        with open(gt_path, "w") as f:
             f.write(text)
 
         img: PIL.Image.Image = img
-        img.save(fname,compression=1)
+        img.save(fname, compression=1)
         if i == len(data_strings):
             break
     except Exception as e:
         print(f"Error genrating with font: {Path(font).name}")
         print(e)
-
 
 if __name__ == "__main__":
     pass
