@@ -28,6 +28,7 @@ class GuppyOCR(OCREngineBase):
         self.mc = mc
         self.model = model
         self.device = device
+        self.model.eval()
 
     @staticmethod
     def load_model(file: Union[str, PathLike], device: torch.device = None):
