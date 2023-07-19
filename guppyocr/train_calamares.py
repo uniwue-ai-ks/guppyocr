@@ -126,6 +126,9 @@ class TrainingOpts:
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
     print("Creating dataset")
+    if opt.reader == "memory":
+        return opt.dataset, opt.val_dataset
+    
     if opt.reader == "plain":
         train_img_path = Path(os.path.join(opt.dataset, 'train'))
         test_img_path = Path(os.path.join(opt.dataset, 'test'))
@@ -154,8 +157,11 @@ class TrainingResult:
     best_model_path: Path
     best_val_cer: float
 
-def train_model(opt: TrainingOpts) -> TrainingResult:
-    manualSeed =  random.randint(1, 10000) # fix seed
+def train_model(opt: TrainingOpts, seed:int = None) -> TrainingResult:
+    if seed is not None:
+        manualSeed = seed
+    else:
+        manualSeed =  random.randint(1, 10000) # fix seed
     print("Random Seed:", )
     random.seed(manualSeed)
     torch.manual_seed(manualSeed)

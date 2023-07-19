@@ -172,6 +172,33 @@ def make_dataset_writer(path: Path, format: str = "plain") -> IDatasetWriter:
     else:
         raise NotImplementedError(f"No dataset writer for format {format}")
 
+class MemoryDatasetRW(IDatasetReader, IDatasetWriter):
+    def __init__(self):
+        self.keys = []
+        self.images = []
+        self.gt = []
+
+
+    def list_files(self):
+        return self.keys
+    
+    def get_image(self, idx:int):
+        return self.images[idx]
+    def get_text(self, idx:int):
+        return self.gt[idx]
+    def get(self, idx: int):
+        return self.get_image(idx), self.get_text(idx)
+    
+    def __len__(self) -> int:
+        return len(self.images)
+    
+    def write(self, key: str, image: np.ndarray, txt: str):
+        self.keys.append(key)
+        self.images.append(image)
+        self.gt.append(txt)
+    
+    def close(self):
+        pass
 
 if __name__=="__main__":
     from tqdm import tqdm
