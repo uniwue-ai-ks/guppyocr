@@ -115,6 +115,7 @@ class TrainingOpts:
     epoch: int = 100
     grad_clip: bool = False
     early_stopping: int = 1000000
+    detailed_results: bool = False
 
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
@@ -122,7 +123,7 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
     if opt.reader == "plain":
         train_img_path = Path(os.path.join(opt.dataset, 'train'))
         test_img_path = Path(os.path.join(opt.dataset, 'test'))
-        if train_img_path.exists():
+        if not train_img_path.exists():
             train_img_path = test_img_path = Path(opt.dataset)
         elif not test_img_path.exists():
             test_img_path = train_img_path
@@ -280,6 +281,7 @@ def train_model(opt: TrainingOpts) -> Path:
     best_total_cer = float("inf")
 #   model.module.rnn[-1].
     epochs_without_improvement = 0
+    detailed_results = []
     for epoch in range(epochs):
         loss_avg = []
         progress = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
@@ -434,10 +436,29 @@ def train_model(opt: TrainingOpts) -> Path:
             else:
                 epochs_without_improvement += 1
             
+            if opt.detailed_results:
+                state_dict = None
+                if torch.cuda.is_available() == True and opt.gpu == True:
+                    state_dict = model.module.state_dict()
+                else:
+                    state_dict = model.state_dict()
+                mconfig.save(Path(output_path) / f"m_epoch{epoch:04}.pth", state_dict)
+                detailed_results.append({
+                    "Epoch": int(epoch),
+                    "TrainLoss": float(np.mean(loss_avg)),
+                    "ValTotalCER": float(total_cer)
+                })
             if epochs_without_improvement > opt.early_stopping:
                 break
 
     print("Best total CER is:", best_total_cer)
+    if detailed_results:
+        print("Saving detailed results as CSV")
+        import pandas as pd
+        df = pd.DataFrame(detailed_results)
+        df.to_csv(Path(output_path) / "detailed_results.csv")
+
+
     return Path(output_path) / "model_best.pth"
 
 # main function:
@@ -458,6 +479,8 @@ if __name__ == '__main__':
     parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
     parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
     parser.add_argument("--test_loaded_model", action="store_true")
+    parser.add_argument("--detailed", action="store_true", help="Enable detailed output mode")
+
 
     opt = parser.parse_args()
 
@@ -472,7 +495,8 @@ if __name__ == '__main__':
         gpu=opt.gpu,
         worker=opt.worker,
         epoch=opt.epoch,
-        grad_clip=opt.grad_clip
+        grad_clip=opt.grad_clip,
+        detailed_results=opt.detailed
     )
     train_model(training_opts)
 
