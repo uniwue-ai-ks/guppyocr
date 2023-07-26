@@ -3,7 +3,7 @@ THis is the main training code.
 '''
 import itertools
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
@@ -26,7 +26,6 @@ from torch.multiprocessing import freeze_support
 from guppyocr.dataset import dataset
 
 from torch import nn
-from guppyocr.dataset.augmentation import AugmentedDataset
 
 from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
@@ -112,8 +111,9 @@ class TrainingOpts:
     reader: str = "plain"
     arch: str = "crnn"
     gpu: bool = False
-    worker: int = 4
+    worker: int = 2
     epoch: int = 100
+    grad_clip: bool = False
     early_stopping: int = 1000000
 
     optimizer: str = "AdaBelief" # Alternative SGD, Adam, AdaBelief
@@ -122,6 +122,7 @@ class TrainingOpts:
     batch_size: int = 8
     test_ignore_chars: List[str] = field(default_factory=lambda: ['@',' '])
     augment: bool = False
+    detailed_results:bool = False
 
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
@@ -218,8 +219,8 @@ def train_model(opt: TrainingOpts, seed:int = None) -> TrainingResult:
         print(f"Creating output directory: {output_path}")
         os.makedirs(output_path,exist_ok=True)
 
-    
-    print("Creating model...")
+    # create model
+    print("Create model......")
     mconfig = ModelConfiguration(ModelParameters(Height,Width,Channel,feature_height,feature_width,seq_len,opt.arch,hidden_units,layers,keep_prob,voc,char2id,id2char,False))
 
 
@@ -254,12 +255,8 @@ def train_model(opt: TrainingOpts, seed:int = None) -> TrainingResult:
 
 
     print("Loading Datasets")
-    train_dataset = dataset.MySimpleDataset(reader_train, Height, Width, seq_len, char2id,augment=True)
-    test_dataset = dataset.MySimpleDataset(reader_val, Height, Width, seq_len, char2id)
-
-    print("Length of train dataset is: ", len(train_dataset))
-    print("Length of test dataset is: ", len(test_dataset))
-    print("Number of output classes is: ", train_dataset.output_classes)
+    train_dataset = dataset.MySimpleDataset(reader_train, Height, Width, seq_len, char2id,augment=opt.augment)
+    test_dataset = dataset.MySimpleDataset(reader_val, Height, Width, seq_len, char2id, augment=False)
 
     # make dataloader
     train_dataloader = torch.utils.data.DataLoader(
@@ -273,12 +270,17 @@ def train_model(opt: TrainingOpts, seed:int = None) -> TrainingResult:
         batch_size=1,
         shuffle=False,
         num_workers=int(worker))
-    
+
+    print("Length of train dataset is: ", len(train_dataset))
+    print("Length of test dataset is: ", len(test_dataset))
+    print("Number of output classes is: ", train_dataset.output_classes)
+
     # make model output folder
     try:
         os.makedirs(output_path)
     except OSError:
         pass
+
 
 
     if opt.test_loaded_model and trained_model_path:
@@ -308,11 +310,13 @@ def train_model(opt: TrainingOpts, seed:int = None) -> TrainingResult:
     best_total_cer = float("inf")
 #   model.module.rnn[-1].
     epochs_without_improvement = 0
+    detailed_results = []
     for epoch in range(epochs):
         loss_avg = []
         progress = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         for i, data in progress:
             x = data[0] # [batch_size, Channel, Height, Width]
+
             y = data[1] # [batch_size, seq_len, output_classes]
             x, y = x.to(device), y.to(device)
             #show_images([x[0].cpu().permute(1,2,0).numpy()], ["Hello"])
@@ -504,7 +508,8 @@ if __name__ == '__main__':
     parser.add_argument("--grad_clip", action="store_true", help="Enable gradient clipping (default off)")
     parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
     parser.add_argument("--test_loaded_model", action="store_true")
-    parser.add_argument("--augment", action="store_true")
+    parser.add_argument("--detailed", action="store_true", help="Enable detailed output mode")
+
 
     opt = parser.parse_args()
 
@@ -521,6 +526,7 @@ if __name__ == '__main__':
         epoch=opt.epoch,
         grad_clip=opt.grad_clip,
         augment=opt.augment,
+	detailed_results=opt.detailed
     )
     train_model(training_opts)
 

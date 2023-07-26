@@ -13,6 +13,7 @@ from tqdm import tqdm
 from guppyocr.dataset.dataset import resize_with_pad
 from guppyocr.make_ocr_ds import extract_pagexml, PolyExtractionSettings, CutoutSample
 from guppyocr.train_calamares import ModelParameters, ModelConfiguration, decode_ctc
+from typing import Tuple
 
 USAGE="""predict
 
@@ -25,14 +26,14 @@ Options:
     --glob              Glob input files
 """
 
-def preprocess_image(img: np.ndarray, width, height) -> torch.Tensor:
+def preprocess_image(img: np.ndarray, width, height) -> Tuple[torch.Tensor, Tuple[float,float]]:
     IMG = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
-    IMG = resize_with_pad(IMG,(width,height),(255,255,255))
+    IMG, ratio_deltaw = resize_with_pad(IMG,(width,height),(255,255,255))
     #IMG = cv2.resize(IMG, (width, height)) # resize
     IMG = (IMG - 127.5)/127.5 # normalization to [-1,1]
     IMG = torch.FloatTensor(IMG) # convert to tensor [H, W, C]
     IMG = IMG.permute(2,0,1) # [C, H, W]
-    return IMG
+    return IMG, ratio_deltaw
 
 def preprocess_cutout(co: CutoutSample, width, height) -> torch.Tensor:
     from guppyocr.dataset.dataset import resize_with_pad
