@@ -3,7 +3,7 @@ THis is the main training code.
 '''
 import itertools
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
