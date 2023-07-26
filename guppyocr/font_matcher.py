@@ -138,7 +138,7 @@ while next(progress_iter) or True:
             os.makedirs("font_models_out",exist_ok=True)
             out_path = (Path("font_models_out") / Path(todo.font_file).name).with_suffix(".pth")
             shutil.copyfile(train_result.best_model_path,out_path)
-            todo.model_path = str(out_path.absolute())
+            todo.model_file = str(out_path.absolute())
             todo.failed = False
             todo.save()
      
