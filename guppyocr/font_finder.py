@@ -71,7 +71,7 @@ def main(args):
             print("success")
             del predictor
         except Exception as e:
-            raise e
+            #raise e
             failed_models.append(m)
 
 
