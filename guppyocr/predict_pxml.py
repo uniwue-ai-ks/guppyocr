@@ -35,7 +35,7 @@ def preprocess_image(img: np.ndarray, width, height) -> Tuple[torch.Tensor, Tupl
     IMG = IMG.permute(2,0,1) # [C, H, W]
     return IMG, ratio_deltaw
 
-def preprocess_cutout(co: CutoutSample, width, height) -> torch.Tensor:
+def preprocess_cutout(co: CutoutSample, width, height) -> Tuple[torch.Tensor, Tuple[float,float]]:
     from guppyocr.dataset.dataset import resize_with_pad
     IMG = co.img.convert("RGB")
     IMG = np.array(IMG)
@@ -59,7 +59,7 @@ class GuppyPageXMLPredictor:
             cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
             #for i, cutout in enumerate(cutouts):
             #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
-            imgs = [preprocess_cutout(x,self.model_config.mconfig.Width, self.model_config.mconfig.Height) for x in cutouts]
+            imgs = [preprocess_cutout(x,self.model_config.mconfig.Width, self.model_config.mconfig.Height)[0] for x in cutouts]
         
             for img, co in zip(imgs, cutouts):
                 img = img[None, :, : ,:]
@@ -99,7 +99,7 @@ def main():
             #for i, cutout in enumerate(cutouts):
             #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
 
-            imgs = [preprocess_cutout(x,mc.mconfig.Width, mc.mconfig.Height) for x in cutouts]
+            imgs = [preprocess_cutout(x,mc.mconfig.Width, mc.mconfig.Height)[0] for x in cutouts]
 
             had_gt = False
             for img, co in zip(imgs, cutouts):
