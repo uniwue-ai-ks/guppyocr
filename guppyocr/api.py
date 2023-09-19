@@ -70,7 +70,7 @@ class GuppyOCR(OCREngineBase):
             for k, v in self.mc.mconfig.id2char.items():
                 alphabet[k] = v
             
-            sentence: DecoderOutput = GreedyDecpoder(alphabet).decode(net_out, extended_info=True)
+            sentence: DecoderOutput = GreedyDecoder(alphabet).decode(net_out, extended_info=True)
             delta = 1 - (img_scale_delta_w / self.mc.mconfig.Width)
 
             local_to_global_pos_factor = (self.mc.mconfig.Width) * (

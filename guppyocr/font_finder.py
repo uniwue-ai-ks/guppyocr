@@ -1,3 +1,4 @@
+from audioop import avg
 from typing import List
 from docopt import docopt
 from pathlib import Path
@@ -5,6 +6,7 @@ import editdistance
 
 from sqlalchemy import Result
 from guppyocr.api import GuppyOCR
+from guppyocr.decoder import DecoderOutput
 
 from guppyocr.make_ocr_ds import CutoutSample, PolyExtractionSettings, extract_pagexml
 from libpagexml3.libpagexml3 import PageXMLParser, PageXMLParserMode
@@ -23,7 +25,15 @@ Usage:
 from peewee import *
 
 
-
+def calculate_output_char_confidence(do: DecoderOutput) -> float:
+    confidences = []
+    for i, c in enumerate(do.char_mapping.charLocationInfo):
+        beg, end = c.char_start, c.char_end + 1
+        avg_prob = np.sum(do.char_mapping.probability_map[beg: end]) / max(1, end - beg)
+        confidences.append(avg_prob)
+    if not confidences:
+        return 0.0
+    return sum(confidences) / max(1,len(confidences))
 
 def main(args):
     # make a list with all available models
@@ -36,9 +46,10 @@ def main(args):
 
     class ResultEntry(Model):
         model =  TextField()
-        pred =  TextField(null=True)
-        gt = TextField(default=False)
-        cer = FloatField(default=False)
+        pred =  TextField(null="")
+        gt = TextField(default="")
+        cer = FloatField(default=0.0)
+        conf = FloatField(default=0.0)
 
         class Meta:
             database = db
@@ -61,9 +72,13 @@ def main(args):
             result_entries: List[ResultEntry] = []
             predictor = GuppyOCR.load_model(m)
             for co in cutouts:
-                res = predictor.ocr(np.array(co.img))
+                #res = predictor.ocr(np.array(co.img))
+                
+                res2,_ = predictor.ocr_with_char_position(np.array(co.img))
+                res = res2.decoded_string
                 cer = editdistance.distance(res,co.gt_text) / max(1,len(co.gt_text))
-                result_entries.append(ResultEntry(model=str(m.name),pred=res,gt=co.gt_text, cer=float(cer)))
+                conf = calculate_output_char_confidence(res2)
+                result_entries.append(ResultEntry(model=str(m.name),pred=res,gt=co.gt_text, cer=float(cer), conf=conf))
 
             with db.atomic():
                 ResultEntry.bulk_create(result_entries)    
