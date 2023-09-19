@@ -37,8 +37,8 @@ def main(args):
     class ResultEntry(Model):
         model =  TextField()
         pred =  TextField(null=True)
-        gt = BooleanField(default=False)
-        cer = BooleanField(default=False)
+        gt = TextField(default=False)
+        cer = FloatField(default=False)
 
         class Meta:
             database = db
@@ -73,11 +73,6 @@ def main(args):
         except Exception as e:
             #raise e
             failed_models.append(m)
-
-
-
-
-
 
 
 if __name__ == "__main__":
