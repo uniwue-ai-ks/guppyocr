@@ -12,6 +12,7 @@ from guppyocr.make_ocr_ds import CutoutSample, PolyExtractionSettings, extract_p
 from libpagexml3.libpagexml3 import PageXMLParser, PageXMLParserMode
 from tqdm import tqdm
 import numpy as np
+from scipy.special import softmax
 
 USAGE=""" Font-Finder
 
@@ -27,6 +28,7 @@ from peewee import *
 
 def calculate_output_char_confidence(do: DecoderOutput) -> float:
     confidences = []
+    pmap = softmax()
     for i, c in enumerate(do.char_mapping.charLocationInfo):
         beg, end = c.char_start, c.char_end + 1
         avg_prob = np.sum(do.char_mapping.probability_map[beg: end]) / max(1, end - beg)
