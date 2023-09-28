@@ -6,7 +6,7 @@ import cv2
 
 augmentations = []
 augment = [A.Compose([]),
-            A.CLAHE(p=0.5),
+            A.CLAHE(p=1),
             #A.Blur(blur_limit=3),
             #A.GridDistortion(border_mode=cv2.BORDER_CONSTANT),
             #//A.ISONoise(),
@@ -17,9 +17,9 @@ augment = [A.Compose([]),
             #A.GaussNoise(),
             A.PixelDropout(dropout_prob=0.3,drop_value=255, p=1),
             A.GridDropout(unit_size_min=4,unit_size_max=8,p=1),
-            A.Downscale(0.5,0.5,p=1),
-            A.GridDistortion(normalized=True,p=1),
-            A
+            A.CoarseDropout(fill_value=255,p=1),
+            A.Downscale(0.25,0.5,p=1),
+            A.GridDistortion(border_mode=cv2.BORDER_CONSTANT, normalized=True,p=1)
 ]
 
 gen = GeneratorFromStrings(
