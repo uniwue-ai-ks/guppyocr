@@ -64,7 +64,7 @@ def main(args):
     cutouts: List[CutoutSample] = []
     for f in pagexml_list:
         cutouts.extend(
-            extract_pagexml(PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page(),f,PolyExtractionSettings())
+            extract_pagexml(PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page(),f,PolyExtractionSettings(use_region_polys=False))
         )
     cutouts = [x for x in cutouts if len(x.gt_text) > 0 ]
     

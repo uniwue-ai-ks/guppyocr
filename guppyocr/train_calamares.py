@@ -131,12 +131,16 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
         return opt.dataset, opt.val_dataset
     
     if opt.reader == "plain":
-        train_img_path = Path(os.path.join(opt.dataset, 'train'))
-        test_img_path = Path(os.path.join(opt.dataset, 'test'))
-        if not train_img_path.exists():
-            train_img_path = test_img_path = Path(opt.dataset)
-        elif not test_img_path.exists():
-            test_img_path = train_img_path
+        if opt.val_dataset:
+            train_img_path = Path(opt.dataset)
+            test_img_path = Path(opt.val_dataset)
+        else:
+            train_img_path = Path(os.path.join(opt.dataset, 'train'))
+            test_img_path = Path(os.path.join(opt.dataset, 'test'))
+            if not train_img_path.exists():
+                train_img_path = test_img_path = Path(opt.dataset)
+            elif not test_img_path.exists():
+                test_img_path = train_img_path
     elif opt.reader == "pq":
         train_img_path = Path(opt.dataset)
         if opt.val_dataset:
@@ -509,6 +513,7 @@ if __name__ == '__main__':
     parser.add_argument("--arch", type=str, choices=["crnn","calamari", "stncrnn", "trcrnn"])
     parser.add_argument("--test_loaded_model", action="store_true")
     parser.add_argument("--detailed", action="store_true", help="Enable detailed output mode")
+    parser.add_argument("--augment", action="store_true", default=False, help="Enable image augmentation")
 
 
     opt = parser.parse_args()

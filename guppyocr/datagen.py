@@ -155,13 +155,13 @@ def main():
         lambda x: x.replace(" ,", ","),
     ])
 
-    random.seed(12345)
+    random.seed(123456)
     data_strings = []
     for i in tqdm(range(1000000)):
         data_strings.append(RandomStringGenerator(None))
 
 
-    fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/textgenerator/fonts/googlefonts/").iterdir()]
+    fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/sar-pytorch/fonts/").iterdir()]
 
     random.shuffle(fonts)
     fonts_iter = itertools.cycle(fonts)
@@ -173,7 +173,7 @@ def main():
             [text],
             blur=OneOf([
                 (1,lambda x: 0),
-                (1, lambda x: 1),
+                (1, lambda x: 0),
                 ])(None),
             size=48,
             skewing_angle=OneOf([
@@ -182,6 +182,7 @@ def main():
                 ])(None),
             random_skew=True,
             fonts=[font],
+            background_type=OneOf([(3,lambda x: 0),(1,lambda x: 2)])(None),
             margins=OneOf([
                 (1, lambda x: (5, 5, 5, 5)),
                 (1, lambda x: (3, 3, 3, 3)),
@@ -192,7 +193,7 @@ def main():
             img, _ = gen.next()
             if img == None:
                 continue
-            fname = Path("/tmp/googlefontsrng/")/ f"{i:07}.png"
+            fname = Path("/tmp/googlefontsval/")/ f"{i:07}.png"
             gt_path = Path(fname).with_suffix(".gt.txt")
             with open(gt_path,"w") as f:
                 f.write(text)
