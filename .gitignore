@@ -3,3 +3,4 @@
 .idea
 stellaris
 venv**
+**/build/**
