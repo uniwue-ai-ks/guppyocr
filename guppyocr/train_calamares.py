@@ -22,6 +22,7 @@ import torch
 import torch.nn.parallel
 import torch.utils.data
 from torch.multiprocessing import freeze_support
+from torch.utils.tensorboard import SummaryWriter
 # internal package
 from guppyocr.dataset import dataset
 
@@ -178,6 +179,8 @@ class TrainingResult:
 
 
 def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
+    writer = SummaryWriter()
+
     if seed is not None:
         manualSeed = seed
     else:
@@ -273,7 +276,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 
     if torch.cuda.is_available() == True and opt.gpu == True:
         model = torch.nn.DataParallel(model).to(device)
-
+    
     print("Loading Datasets")
     train_dataset = dataset.MySimpleDataset(
         reader_train, Height, Width, seq_len, char2id, augment=opt.augment)
@@ -327,6 +330,9 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
         scheduler = None
 
     num_batch = math.ceil(len(train_dataset) / batch_size)
+
+    # write to tensorboard
+    # writer.add_graph(model, torch.rand(1, Channel, Height, Width).to(device))
 
     print("Beginning training")
     best_total_cer = float("inf")
@@ -408,6 +414,8 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
             # prediction evaluation
             pred_choice = predict.max(2)[1]  # [batch_size, seq_len]
 
+            writer.add_scalar('Loss/train', loss.item(), epoch * num_batch + i)
+
             progress.desc = f'[Epoch {epoch}: {i}/{num_batch}] train loss: {np.mean(loss_avg):.3f}'
             # print("predict prob:", predict[0][0])
             # print("predict words:", predict_words[0])
@@ -481,9 +489,19 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                 errors += edit_distance
                 CER_SUM.append(CER)
                 if i in print_indices:
-                    print(f"GT:   {decoded_gt}")
-                    print(f"Pred: {decoded_tgt}")
-                    print(f"  CER = {CER:.5f}")
+                    tqdm.write(f"GT:   {decoded_gt}")
+                    tqdm.write(f"Pred: {decoded_tgt}")
+                    tqdm.write(f"  CER = {CER:.5f}")
+                    # write example to tensorboard
+                    writer.add_text(
+                        f"GT_{i}", decoded_gt, epoch * num_batch + i)
+                    writer.add_text(
+                        f"Pred_{i}", decoded_tgt, epoch * num_batch + i)
+
+            writer.add_scalar('CER/val mean', float(np.mean(CER_SUM)),
+                              epoch * num_batch + i)
+            writer.add_scalar('CER/val total', errors / total_chars,
+                              epoch * num_batch + i)
 
             print("Epoch {} average CER: {:.5f}".format(
                 epoch, float(np.mean(CER_SUM))))
@@ -526,6 +544,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 if __name__ == '__main__':
     os.nice(10)
     freeze_support()
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--worker', type=int, default=2, help='number of data loading workers')

@@ -30,7 +30,11 @@ def resize_with_pad(image: np.ndarray,
         new_size = tuple([int(x * ratio) for x in original_shape])
 
     assert new_size[0] <= new_shape[0] and new_size[1] <= new_shape[1]
-    image = cv2.resize(image, new_size)
+    try:
+        image = cv2.resize(image, new_size)
+    except cv2.error:
+        print("Error during resize")
+        return [[],[],[]], None
     #delta_w = new_shape[0] - new_size[0] if new_shape[0] > new_size[0] else 0
     #delta_h = new_shape[1] - new_size[1] if new_shape[1] > new_size[1] else 0
     delta_w = new_shape[0] - new_size[0]
@@ -44,7 +48,9 @@ def resize_with_pad(image: np.ndarray,
 
 def transform_image(img: np.ndarray, width, height):
     IMG, _ = resize_with_pad(img,(width,height),(255,255,255))
-        #IMG = cv2.resize(IMG, (width, height)) # resize
+    if len(IMG[0]) == 0:
+        return [[],[],[]]
+    #IMG = cv2.resize(IMG, (width, height)) # resize
     IMG = (IMG - 127.5)/127.5 # normalization to [-1,1]
     IMG = torch.FloatTensor(IMG) # convert to tensor [H, W, C]
     IMG = IMG.permute(2,0,1) # [C, H, W]
@@ -83,7 +89,11 @@ class MySynthDataset(data.Dataset):
                     if len(gt) > seq_len: continue
                 # load the image
                 if self.load_images_to_memory:
-                    self.dataset.append((load_image(str(f.absolute()),self.width, self.height), gt))
+                    img = load_image(str(f.absolute()),self.width, self.height)
+                    if not img:
+                        print(f"Img error {f}, skipping")
+                        continue
+                    self.dataset.append((img, gt))
                 else:
                     self.dataset.append((str(f.absolute()), gt))
 
@@ -172,29 +182,45 @@ class MySimpleDataset(data.Dataset):
         self.output_classes = len(self.char2id)
         self.load_images_to_memory = False
         self.putend = putend
-        
+
         for i,f in enumerate(self.reader.list_files()):
-                if self.load_images_to_memory:
-                    img, gt = self.reader.get(i)
-                    img = transform_image(img, width, height)
-                    self.dataset.append((img,gt))
-                else:
-                    gt = self.reader.get_text(i)
-                    self.dataset.append((i, gt))
+            if self.load_images_to_memory:
+                img, gt = self.reader.get(i)
+                img = transform_image(img, width, height)
+                if len(img[0]) == 0:
+                    continue
+                self.dataset.append((img,gt))
+            else:
+                gt = self.reader.get_text(i)
+                self.dataset.append((i, gt))
         if augment:
             self.transform= get_transform("old")
             self.augment =augment
         else:
             self.augment = None
-    def __getitem__(self, index):
-        img_name, label = self.dataset[index]
+    
+    def load_img(self, img_name):
         if self.load_images_to_memory:
-            IMG = img_name
+            return img_name
         else:
             img = self.reader.get_image(img_name)
             if self.augment:
                 img = self.transform(image=img)["image"]
-            IMG = transform_image(img, self.width, self.height)
+            return transform_image(img, self.width, self.height)
+
+    def __getitem__(self, index):
+        if not 0<=index<=len(self.dataset)-1:
+            index = np.random.randint(0, len(self.dataset)-1)
+
+        img_name, label = self.dataset[index]
+        
+        IMG = self.load_img(img_name)
+        while len(IMG[0]) == 0:
+            del self.dataset[index]
+            # get new sample
+            idx = np.random.randint(0, len(self.dataset)-1)
+            img_name, label = self.dataset[idx]
+            IMG = self.load_img(img_name)
         
         y_true = np.ones(self.seq_len,dtype=np.int32)*int(self.char2id['PAD'])
         # label processing
