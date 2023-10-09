@@ -69,9 +69,13 @@ class PlainDatasetReader(IDatasetReader):
         return len(self.files)
 
 class PlainDatasetWriter(IDatasetWriter):
-    def __init__(self, root_dir: Path, overwrite: bool = False):
+    def __init__(self, root_dir: Path, overwrite: bool = False, create_root_dir: bool = True):
         self.root_dir = root_dir
         self.overwrite = overwrite
+
+        # check that root_dir exists, if not create it
+        if not self.root_dir.exists() and create_root_dir:
+            self.root_dir.mkdir(parents=True)
 
     def write(self, key: str, image: Union[PIL.Image.Image, np.ndarray], text: str):
         fname = key
