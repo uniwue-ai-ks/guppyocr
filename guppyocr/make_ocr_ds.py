@@ -149,7 +149,7 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
         xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in source_files_dirs]))
     else:
         xml_files = []
-        for arg in source_files_dirs:
+        for arg in [Path(x) for x in source_files_dirs]:
             if arg.is_dir():
                 xml_files += find_all_pagexmls_recursively(arg)
             elif arg.suffix == ".xml":

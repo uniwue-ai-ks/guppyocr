@@ -3,7 +3,7 @@ THis is the main training code.
 '''
 import itertools
 import os
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
@@ -138,6 +138,11 @@ class TrainingOpts:
     layers: int = 2
     keep_prob: float = 1.0
     seq_len: int = 80
+
+    def get_hyperparameters(self) -> dict:
+        hparams_dict = asdict(self)
+        hparams_dict["test_ignore_chars"] = "".join(sorted(hparams_dict["test_ignore_chars"]))
+        return hparams_dict
 
 
 def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
@@ -339,6 +344,8 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 #   model.module.rnn[-1].
     epochs_without_improvement = 0
     detailed_results = []
+
+    writer.add_hparams(opt.get_hyperparameters(),dict())
     for epoch in range(epochs):
         loss_avg = []
         progress = tqdm.tqdm(enumerate(train_dataloader),
@@ -489,14 +496,14 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                 errors += edit_distance
                 CER_SUM.append(CER)
                 if i in print_indices:
-                    tqdm.write(f"GT:   {decoded_gt}")
-                    tqdm.write(f"Pred: {decoded_tgt}")
-                    tqdm.write(f"  CER = {CER:.5f}")
+                    print(f"GT:   {decoded_gt}")
+                    print(f"Pred: {decoded_tgt}")
+                    print(f"  CER = {CER:.5f}")
                     # write example to tensorboard
                     writer.add_text(
-                        f"GT_{i}", decoded_gt, epoch * num_batch + i)
+                        f"GT_{i}", decoded_gt, epoch * num_batch)
                     writer.add_text(
-                        f"Pred_{i}", decoded_tgt, epoch * num_batch + i)
+                        f"Pred_{i}", decoded_tgt, epoch * num_batch)
 
             writer.add_scalar('CER/val mean', float(np.mean(CER_SUM)),
                               epoch * num_batch + i)
