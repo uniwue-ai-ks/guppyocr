@@ -478,21 +478,23 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
             for i, data in tqdm.tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
                 x = data[0]  # [batch_size, Channel, Height, Width]
                 y = data[1]  # [batch_size, seq_len, output_classes]
-                x, y = x.to(device), y.to(device)
+                #y_np = y.numpy()
+                x, y_gpu = x.to(device), y.clone().to(device)
 
-                predict, _, _, _ = model(x, y)
+                predict, _, _, _ = model(x, y_gpu)
                 # prediction evaluation
                 #pred_choice = predict.max(2)[1]  # [batch_size, seq_len]
                 #pred_decoded = predict.argmax(dim=2)
+                target = (y.max(2)[1])  # [batch_size, seq_len]
                 for batch_i in range(int(x.shape[0])):
-                    target = y.max(2)[1]  # [batch_size, seq_len]
+                    #target = target.to("cpu")
                     # print(target_firstpad)
                     # if i % 64 == 0:
                     #    print_val(target[0], predict[0], id2char)
                     this_target = target[batch_i]
                     try:
                         target_firstpad = (this_target == char2id["PAD"]).nonzero(as_tuple=True)[0][0]
-                        this_target = target[:target_firstpad]
+                        this_target = this_target[:target_firstpad]
                     except IndexError as e:
                         pass
 
