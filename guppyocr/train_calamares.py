@@ -184,6 +184,7 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
         raise RuntimeError("Cannot specify --split_val and a validation dataset at the same time")
     elif opt.split_val is not None:
         reader_train, reader_val = SplitDatasetAdaptor.split_reader(reader_train,opt.split_val,seed=123456)
+
     return reader_train, reader_val
 
 
@@ -482,7 +483,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                 # prediction evaluation
                 #pred_choice = predict.max(2)[1]  # [batch_size, seq_len]
                 #pred_decoded = predict.argmax(dim=2)
-                for batch_i in range(batch_size):
+                for batch_i in range(int(x.shape[0])):
                     target = y.max(2)[1]  # [batch_size, seq_len]
                     try:
                         target_firstpad = (target[0] == char2id["PAD"]).nonzero(
