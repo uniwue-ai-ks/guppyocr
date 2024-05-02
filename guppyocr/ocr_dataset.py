@@ -1,3 +1,4 @@
+from csv import reader
 import io
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -7,6 +8,8 @@ import numpy as np
 import PIL
 import PIL.Image
 import cv2
+import random
+
 
 
 class IDatasetReader(ABC):
@@ -203,6 +206,44 @@ class MemoryDatasetRW(IDatasetReader, IDatasetWriter):
     
     def close(self):
         pass
+
+class SplitDatasetAdaptor(IDatasetReader):
+    @staticmethod
+    def split_reader(reader: IDatasetReader, ratio: float, seed: int = 123456) -> Tuple[IDatasetReader, IDatasetReader]:
+        indices = [k for k,v in enumerate(reader.list_files())]
+        rng = random.Random(seed)
+        indices = rng.shuffle(indices)
+        split_idx = len(indices) * ratio
+        train, test = indices[:split_idx], indices[split_idx:]
+        if not train or not test:
+            raise RuntimeError("Dataset too small to split")
+        return SplitDatasetAdaptor(reader, train), SplitDatasetAdaptor(reader, test)
+
+    def __init__(self, reader: IDatasetReader, indices: list):
+        self.reader= reader
+        self.indices = indices
+    
+    @abstractmethod
+    def list_files(self) -> Iterable[str]:
+        files = self.reader.list_files()
+        return [files[i] for i in self.indices]
+    
+
+    @abstractmethod
+    def get_image(self, idx: int) -> np.ndarray:
+        return self.reader.get_image(self.indices[idx])
+
+    @abstractmethod
+    def get_text(self, idx: int) -> str:
+        return self.reader.get_text(self.indices[idx])
+
+    @abstractmethod
+    def get(self, idx: int) -> Tuple[np.ndarray, str]:
+        return self.get_image(idx), self.get_text(idx)
+
+    @abstractmethod
+    def __len__(self) -> int:
+        return len(self.indices)
 
 if __name__=="__main__":
     from tqdm import tqdm

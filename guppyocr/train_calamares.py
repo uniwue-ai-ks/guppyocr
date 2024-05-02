@@ -605,9 +605,9 @@ if __name__ == '__main__':
                         help='Dropout keep probability (default: 1.0)')
     parser.add_argument('--seq_len', type=int, default=80,
                         help='Sequence length (default: 80)')
-
+    import sys
+    print(sys.argv)
     args = parser.parse_args()
-
     training_opts = TrainingOpts(
                 output=args.output,
         dataset=args.dataset,

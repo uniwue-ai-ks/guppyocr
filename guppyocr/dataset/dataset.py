@@ -151,16 +151,16 @@ def get_transform(key: str = None):
                 #A.RandomFog(fog_coef_lower=0.3,fog_coef_upper=0.4,p=1),    
                 A.MultiplicativeNoise(elementwise=True,multiplier=(0.4,4), p=1),       
                 A.GaussNoise(var_limit=(10,200),per_channel=False,p=1),
-            ]),
+            ],p=0.5),
             A.OneOf([
                 A.PixelDropout(dropout_prob=0.3,drop_value=255, p=1),
                 A.CoarseDropout(max_holes=20,fill_value=255,p=1),
-            ]),
+            ],p=0.5),
             A.OneOf([
                 A.Downscale(0.5,0.5,{"downscale": cv2.INTER_NEAREST, "upscale": cv2.INTER_LINEAR},p=1),
                 A.GridDistortion(interpolation=cv2.INTER_CUBIC, border_mode=cv2.BORDER_CONSTANT, normalized=True,p=1)
-            ])
-        ], p=0.5)
+            ],p=0.5)
+        ], p=1)
     }[key]
 class MySimpleDataset(data.Dataset):
     def __init__(self, dataset_reader: IDatasetReader, height, width, seq_len, char2id, putend: bool = False, augment:bool = False):
@@ -194,8 +194,8 @@ class MySimpleDataset(data.Dataset):
                 gt = self.reader.get_text(i)
                 self.dataset.append((i, gt))
         if augment:
-            self.transform= get_transform("old")
-            self.augment =augment
+            self.transform= get_transform("new")
+            self.augment = augment
         else:
             self.augment = None
     

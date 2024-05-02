@@ -48,15 +48,17 @@ def batch(iterable, n=1):
 
 class GuppyPageXMLPredictor:
     def __init__(self, model_path: Path, dry_run: bool = False) -> None:
-         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-         self.dry_run = dry_run
-         self.model_config, self.model = ModelConfiguration.load_model(model_path, self.device)
-         self.model.eval()
-
+        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        self.dry_run = dry_run
+        self.model_config, self.model = ModelConfiguration.load_model(model_path, self.device)
+        self.model.eval()
+        #print("Warning, Greek Transcription is enabled")
     def predict_pagexml(self, f: Path) -> PageXMLPage:
         with torch.set_grad_enabled(False):
-            page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()
+            page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()    
+            #cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(text_id=TextEquiv.TEXT_ID_GREEK_CORRECTION,fallback_text_id=TextEquiv.TEXT_ID_GROUND_TRUTH),inference=True))
             cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
+            # TODO: deactivate this again
             #for i, cutout in enumerate(cutouts):
             #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
             imgs = [preprocess_cutout(x,self.model_config.mconfig.Width, self.model_config.mconfig.Height)[0] for x in cutouts]
@@ -94,7 +96,7 @@ def main():
     with torch.no_grad():
         for f in tqdm(pagexmls):
             page = PageXMLParser.from_file(f,strictness=PageXMLParserMode.EASY).get_page()
-            cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(),inference=True))
+            cutouts = list(extract_pagexml(page,Path(f),PolyExtractionSettings(text_id=TextEquiv.TEXT_ID_GREEK_CORRECTION,fallback_text_id=TextEquiv.TEXT_ID_GROUND_TRUTH),inference=True))
 
             #for i, cutout in enumerate(cutouts):
             #    cutout.img.save(f"/tmp/cutouts/{Path(f).with_suffix('').name}_{i:03}.png")
@@ -109,8 +111,20 @@ def main():
                 prediction, _ , _ ,_ = model.forward(img,None)
                 decoded_tgt = decode_ctc(prediction[0], mc.mconfig.id2char)
                 co.tl.text_equivs[TextEquiv.TEXT_ID_PREDICTION] = TextEquiv(TextEquiv.TEXT_ID_PREDICTION,decoded_tgt)
-                if co.tl.has_gt_text():
+                """if co.tl.has_gt_text():
                     gt_text = co.tl.get_text_gt().replace("↵","")
+                    distance = editdistance.distance(decoded_tgt, gt_text)
+                    total_chars += len(gt_text)
+                    total_errors += distance
+                    print("GT:  ", gt_text)
+                    print("Pred:", decoded_tgt)
+                    #print("Pred:", decoded_tgt)
+                    #print("GT:  ", gt_text)
+                    #print("CER: ", editdistance.distance(decoded_tgt, gt_text) / len(gt_text))
+                    had_gt = True
+                """
+                if TextEquiv.TEXT_ID_GREEK_CORRECTION in co.tl.text_equivs:
+                    gt_text = co.tl.text_equivs[TextEquiv.TEXT_ID_GREEK_CORRECTION].text.replace("↵","")
                     distance = editdistance.distance(decoded_tgt, gt_text)
                     total_chars += len(gt_text)
                     total_errors += distance

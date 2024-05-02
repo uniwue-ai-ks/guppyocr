@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 from docopt import docopt
 from libpagexml3.libpagexml3 import PageXMLPage, PageXMLParser, PageXMLParserMode, TextLine, PageXMLTextTypes, \
-    PageRegionTypes
+    PageRegionTypes, TextEquiv
 import PIL
 import PIL.Image
 import PIL.ImageDraw
@@ -26,12 +26,13 @@ Usage:
     make_ocr_ds [options] <output_path> <pagexmls>...
 
 Options:
-    --writer=WRITER     Output writer to use [default: plain]
-    --prefix=PREFIX     set image prefix [default: ]
-    --skip              Skip files if no Companion file is found
-    --no-greek          Skip lines containing greek characters (@)
-    --squash_ats        Squash At Characters into a single char
-    --glob              Glob Image Files instead of iterating
+    --writer=WRITER         Output writer to use [default: plain]
+    --prefix=PREFIX         set image prefix [default: ]
+    --skip                  Skip files if no Companion file is found
+    --no-greek              Skip lines containing greek characters (@)
+    --squash_ats            Squash At Characters into a single char
+    --glob                  Glob Image Files instead of iterating
+    --text_equiv_id=TEXT_ID
 """
 
 class FilenameEnumerator:
@@ -55,8 +56,9 @@ class CompanionFileNotFound(Exception):
 class PolyExtractionSettings:
     mask_poly: bool = False
     use_companion_image: CompanionImageType = CompanionImageType.COLOR
-
     use_region_polys: bool = True
+    text_id: int = TextEquiv.TEXT_ID_GROUND_TRUTH
+    fallback_text_id: int = None
 
 @dataclass
 class CutoutSample:
@@ -107,7 +109,7 @@ def extract_pagexml(pxml: PageXMLPage, xml_path: Path, poly_extraction_settings:
     companion_image_arr = np.array(companion_image)
 
     for tl in pxml.text_lines():
-        if not inference and not tl.has_gt_text():
+        if not inference and not poly_extraction_settings.text_id in tl.text_equivs and not poly_extraction_settings.fallback_text_id in tl.text_equivs:
             continue
         parent_region = pxml.region_by_id(tl.parent_region_id)
         if parent_region.region_type in filter.region_type_blacklist or \
@@ -118,8 +120,11 @@ def extract_pagexml(pxml: PageXMLPage, xml_path: Path, poly_extraction_settings:
             poly = parent_region.polygon
         else:
             poly = tl.polygon
-
-        gt_txt = tl.get_text_gt()
+        gt_txt = ""
+        if poly_extraction_settings.text_id in tl.text_equivs:
+            gt_txt = tl.text_equivs[poly_extraction_settings.text_id].text
+        elif poly_extraction_settings.fallback_text_id in tl.text_equivs:
+            gt_txt = tl.text_equivs[poly_extraction_settings.fallback_text_id].text
         cut_image = extract_textline_image(companion_image_arr,poly,poly_extraction_settings)
         yield CutoutSample(cut_image,gt_txt, tl)
 
@@ -137,12 +142,16 @@ class LanguageSettings:
     disable_greek: bool = False
     cut_line_ending_mark: bool = True
     filter_small_lines: int = 0
+    gt_id:int = TextEquiv.TEXT_ID_GREEK_CORRECTION
+    gt_fallback: int = TextEquiv.TEXT_ID_GROUND_TRUTH
 
 def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: CompanionImageType, source_files_dirs: List[Path], glob_input: bool = False, language_settings: LanguageSettings = LanguageSettings(), ds_prefix: str = ''):
     settings = PolyExtractionSettings(
         mask_poly=False,
         use_companion_image=CompanionImageType.COLOR,
-        use_region_polys=False
+        use_region_polys=False,
+        text_id=language_settings.gt_id,
+        fallback_text_id=language_settings.gt_fallback
     )
     
     if glob_input:
@@ -194,7 +203,9 @@ def main(args):
         args["<pagexmls>"],args["--glob"],
         LanguageSettings(disable_greek=args["--no-greek"],
                          cut_line_ending_mark=True,
-                         filter_small_lines=3
+                         filter_small_lines=3,
+                         gt_id=TextEquiv.TEXT_ID_GREEK_CORRECTION,
+                         gt_fallback=TextEquiv.TEXT_ID_GROUND_TRUTH
                          )
         )
 
