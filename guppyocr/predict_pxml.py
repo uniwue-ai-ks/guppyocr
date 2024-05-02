@@ -124,7 +124,7 @@ def main():
                     had_gt = True
                 """
                 if TextEquiv.TEXT_ID_GREEK_CORRECTION in co.tl.text_equivs:
-                    gt_text = co.tl.text_equivs[TextEquiv.TEXT_ID_GREEK_CORRECTION].text.replace("↵","")
+                    gt_text = co.tl.text_equivs[TextEquiv.TEXT_ID_GREEK_CORRECTION].text.replace("↵","") # TODO: this should be removed for the final version
                     distance = editdistance.distance(decoded_tgt, gt_text)
                     total_chars += len(gt_text)
                     total_errors += distance

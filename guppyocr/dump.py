@@ -1,5 +1,5 @@
 from docopt import docopt
-from train_calamares import ModelConfiguration
+from guppyocr.train_calamares import ModelConfiguration
 from dataclasses import asdict
 
 USAGE="""dump.py

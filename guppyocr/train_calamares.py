@@ -31,6 +31,7 @@ from torch import nn
 from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
 from guppyocr.ocr_dataset import IDatasetReader, SplitDatasetAdaptor, make_dataset_reader
+from guppyocr.predict_pxml import batch
 
 
 def decode_ctc(pred, id2char) -> str:
@@ -179,11 +180,12 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
     print(f"Using traing dataset: {train_img_path}")
     print(f"Using val dataset: {test_img_path}")
     reader_train = make_dataset_reader(train_img_path, opt.reader)
-    reader_val = make_dataset_reader(test_img_path, opt.reader)
     if use_val_dataset and opt.split_val is not None:
         raise RuntimeError("Cannot specify --split_val and a validation dataset at the same time")
     elif opt.split_val is not None:
         reader_train, reader_val = SplitDatasetAdaptor.split_reader(reader_train,opt.split_val,seed=123456)
+    else:
+        reader_val = make_dataset_reader(test_img_path, opt.reader)
 
     return reader_train, reader_val
 
@@ -485,16 +487,17 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                 #pred_decoded = predict.argmax(dim=2)
                 for batch_i in range(int(x.shape[0])):
                     target = y.max(2)[1]  # [batch_size, seq_len]
-                    try:
-                        target_firstpad = (target[0] == char2id["PAD"]).nonzero(
-                            as_tuple=True)[0][0]
-                        target = target[:, :target_firstpad]
-                    except IndexError as e:
-                        pass
                     # print(target_firstpad)
                     # if i % 64 == 0:
                     #    print_val(target[0], predict[0], id2char)
-                    decoded_gt = decode_gt(target[batch_i], id2char)
+                    this_target = target[batch_i]
+                    try:
+                        target_firstpad = (this_target == char2id["PAD"]).nonzero(as_tuple=True)[0][0]
+                        this_target = target[:target_firstpad]
+                    except IndexError as e:
+                        pass
+
+                    decoded_gt = decode_gt(this_target, id2char)
                     decoded_tgt = decode_ctc(predict[batch_i], id2char)
                     decoded_gt_eval = decoded_gt
                     decoded_tgt_eval = decoded_tgt
