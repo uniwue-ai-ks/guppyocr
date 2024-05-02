@@ -1,6 +1,7 @@
 from csv import reader
 import io
 from abc import ABC, abstractmethod
+from math import floor
 from pathlib import Path
 from typing import Iterable, List, Tuple, Union
 
@@ -213,7 +214,7 @@ class SplitDatasetAdaptor(IDatasetReader):
         indices = [k for k,v in enumerate(reader.list_files())]
         rng = random.Random(seed)
         rng.shuffle(indices)
-        split_idx = len(indices) * ratio
+        split_idx = floor(len(indices) * ratio)
         train, test = indices[:split_idx], indices[split_idx:]
         if not train or not test:
             raise RuntimeError("Dataset too small to split")
