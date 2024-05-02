@@ -223,26 +223,21 @@ class SplitDatasetAdaptor(IDatasetReader):
     def __init__(self, reader: IDatasetReader, indices: list):
         self.reader= reader
         self.indices = indices
-    
-    @abstractmethod
+
     def list_files(self) -> Iterable[str]:
         files = self.reader.list_files()
         return [files[i] for i in self.indices]
     
 
-    @abstractmethod
     def get_image(self, idx: int) -> np.ndarray:
         return self.reader.get_image(self.indices[idx])
 
-    @abstractmethod
     def get_text(self, idx: int) -> str:
         return self.reader.get_text(self.indices[idx])
 
-    @abstractmethod
     def get(self, idx: int) -> Tuple[np.ndarray, str]:
         return self.get_image(idx), self.get_text(idx)
 
-    @abstractmethod
     def __len__(self) -> int:
         return len(self.indices)
 
