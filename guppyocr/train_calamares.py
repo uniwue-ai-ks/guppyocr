@@ -31,7 +31,6 @@ from torch import nn
 from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
 from guppyocr.ocr_dataset import IDatasetReader, SplitDatasetAdaptor, make_dataset_reader
-from guppyocr.predict_pxml import batch
 
 
 def decode_ctc(pred, id2char) -> str:
