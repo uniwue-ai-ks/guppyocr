@@ -212,7 +212,7 @@ class SplitDatasetAdaptor(IDatasetReader):
     def split_reader(reader: IDatasetReader, ratio: float, seed: int = 123456) -> Tuple[IDatasetReader, IDatasetReader]:
         indices = [k for k,v in enumerate(reader.list_files())]
         rng = random.Random(seed)
-        indices = rng.shuffle(indices)
+        rng.shuffle(indices)
         split_idx = len(indices) * ratio
         train, test = indices[:split_idx], indices[split_idx:]
         if not train or not test:
