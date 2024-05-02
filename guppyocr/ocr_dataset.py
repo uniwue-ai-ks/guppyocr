@@ -218,6 +218,7 @@ class SplitDatasetAdaptor(IDatasetReader):
         train, test = indices[:split_idx], indices[split_idx:]
         if not train or not test:
             raise RuntimeError("Dataset too small to split")
+        print(f"Splitted Dataset: {len(train)} train, {len(test)} test samples")
         return SplitDatasetAdaptor(reader, train), SplitDatasetAdaptor(reader, test)
 
     def __init__(self, reader: IDatasetReader, indices: list):
