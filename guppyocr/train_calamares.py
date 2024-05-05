@@ -591,7 +591,7 @@ if __name__ == '__main__':
                         required=True, help="dataset path")
     parser.add_argument('--val_dataset', type=str,
                         required=False, help="validation dataset path")
-    parser.add_argument('--split_val', type=float, required=False, default=None, help="Percentage of dataset to use for validation")
+    parser.add_argument('--split_val', type=float, required=False, default=None, help="Percentage of dataset to use for training")
     parser.add_argument('--gpu', type=bool, default=False, help="Use GPU")
     parser.add_argument("--grad_clip", action="store_true",
                         help="Enable gradient clipping (default off)")
