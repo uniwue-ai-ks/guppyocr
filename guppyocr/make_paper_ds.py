@@ -18,6 +18,7 @@ from sympy import O
 from torch import Value
 from tqdm import tqdm
 from guppyocr.make_ocr_ds import PolyExtractionSettings, get_color_companion, get_textline_polygon_bb
+from docopt import docopt
 
 class LineType(enum.Enum):
     LATIN = 1
@@ -175,7 +176,7 @@ def make_line_table(files: List[Path]):
             gtl.line_type = LineType.PENDING
     return all_lines
 
-def build_line_table(globs: List[str]):
+def build_line_table(globs: List[str], out_dir: str):
 
     files = sum([glob(x) for x in globs],start=[])
     files = sorted(files)
@@ -189,7 +190,7 @@ def build_line_table(globs: List[str]):
     build_gt_types(all_lines)
     df = pd.DataFrame([asdict(x) for x in all_lines])
 
-    with pd.ExcelWriter("/tmp/ds4_out.xlsx",engine="openpyxl") as ew:
+    with pd.ExcelWriter(Path(out_dir) / "ds4_out.xlsx",engine="openpyxl") as ew:
         df.to_excel(ew)
     return all_lines
     
@@ -243,7 +244,7 @@ def build_gt_types(lt: List[GTLine]):
 
 
 
-def build_training_ds_n(line_table: List[GTLine]):
+def build_training_ds_n(line_table: List[GTLine], out_dir: str):
     rng = random.Random(123456)
     latin = [x for x in line_table if x.line_type == LineType.LATIN]
     rng.shuffle(latin)
@@ -256,12 +257,16 @@ def build_training_ds_n(line_table: List[GTLine]):
         for i,x  in enumerate(c,start=0):
             x.grp_count = i
     
-    counts = [500, 1000, 2000, 4000, 10000000]
+    counts = [500, 1000, 2000, 4000, 100000]
     for count in counts:
         ds_latin = sorted(latin[:count],key=lambda x: x.xml_file)
         ds_mixed = sorted(mixed[:count], key=lambda x: x.xml_file)
+        
+        out_dir = Path(out_dir)
 
-        o_dir = f"/home/norbert/uni/page-segment/GreekPaperNew/DS4/C{count}"
+        #o_dir = f"/home/norbert/uni/page-segment/GreekPaperNew/DS4/C{count}"
+        o_dir = Path(out_dir/f"C{count}")
+
         os.makedirs(o_dir, exist_ok=True)
         os.makedirs(Path(o_dir) / "Latin", exist_ok=True)
         os.makedirs(Path(o_dir) / "CLS", exist_ok=True)
@@ -294,12 +299,24 @@ def build_training_ds_n(line_table: List[GTLine]):
             save_cutout(x,o_name)
 
 
+
+USAGE="""make_paper_ds.py
+
+Usage:
+    make_paper_ds <out_dir> <datasets>...
+
+"""
+
+
+
 if __name__=="__main__":
-    line_table = build_line_table(source_dirs)
+    args = docopt(USAGE)
+    source_dirs = args["<datasets>"]
+    line_table = build_line_table(source_dirs, args["<out_dir>"])
 
     for v in LineType:
         print(f"COUNT({v}): {sum(1 for x in line_table if x.line_type == v)}")
     valid_line_types = {LineType.GREEK, LineType.MIXED, LineType.LATIN}
     filtered_line_table = [x for x in line_table if x.line_type in valid_line_types]
 
-    build_training_ds_n(filtered_line_table)
+    build_training_ds_n(filtered_line_table, args["<out_dir>"])
