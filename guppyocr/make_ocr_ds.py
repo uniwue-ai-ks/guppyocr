@@ -69,6 +69,12 @@ class CutoutSample:
     tl: TextLine
 
 
+def get_textline_polygon_bb(poly: np.ndarray):
+    x_min, x_max = floor(np.amin(poly[:,0])), ceil(np.amax(poly[:,0]))
+    y_min, y_max = floor(np.amin(poly[:,1])), ceil(np.amax(poly[:,1]))
+    return x_min,y_min,x_max, y_max
+
+
 def extract_textline_image(img: np.ndarray, poly: np.ndarray, extraction_settings: PolyExtractionSettings) -> PIL.Image.Image:
     #assert len(img.shape) == 3, f"Image is not in XYC format, it is {img.shape}"
 
@@ -94,17 +100,19 @@ class RegionFilter:
     region_type_blacklist: Set[PageRegionTypes] = field(default_factory=set)
     text_type_blacklist: Set[PageXMLTextTypes] = field(default_factory=set)
 
+def get_color_companion(xml_path: Path):
+    for cn in [xml_path.with_suffix(".png"), xml_path.with_suffix(".jpg"), xml_path.with_suffix(".jpeg"),xml_path.with_suffix(".png.ocr") ]:
+        if cn.exists():
+            companion_image = PIL.Image.open(cn)
+            companion_image = companion_image.convert("RGB")
+            return companion_image
+    else:
+        raise CompanionFileNotFound(f"Companion image for {xml_path} not found")
 
 def extract_pagexml(pxml: PageXMLPage, xml_path: Path, poly_extraction_settings: PolyExtractionSettings, inference: bool = False, filter: RegionFilter = RegionFilter()) -> Iterable[CutoutSample]:
     # load the companion image
     if poly_extraction_settings.use_companion_image == CompanionImageType.COLOR:
-        for cn in [xml_path.with_suffix(".png"), xml_path.with_suffix(".jpg"), xml_path.with_suffix(".jpeg"),xml_path.with_suffix(".png.ocr") ]:
-            if cn.exists():
-                companion_image = PIL.Image.open(cn)
-                companion_image = companion_image.convert("RGB")
-                break
-        else:
-            raise CompanionFileNotFound(f"Companion image for {xml_path} not found")
+        companion_image = get_color_companion(xml_path)
     else:
         companion_image = PIL.Image.open(xml_path.with_suffix(".png.ocr"))
 
