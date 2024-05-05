@@ -2,8 +2,11 @@ from dataclasses import asdict, dataclass
 import enum
 import functools
 import itertools
+import os
 from pathlib import Path
 from glob import glob
+import random
+import re
 from typing import Iterable, List, Optional, Set, Tuple
 import unicodedata
 from libpagexml3.libpagexml3 import PageXMLParser, PageXMLParserMode, TextLine, TextEquiv, PageXMLTextTypes
@@ -11,6 +14,7 @@ from loguru import logger
 import numpy as np
 import pandas as pd
 from sqlalchemy import all_
+from sympy import O
 from torch import Value
 from tqdm import tqdm
 from guppyocr.make_ocr_ds import PolyExtractionSettings, get_color_companion, get_textline_polygon_bb
@@ -33,13 +37,24 @@ class GTLine:
     line_type: LineType
     latin: str
     greek: str
-    poly: np.ndarray
+    poly: Tuple[int]
     region_type: str
     
     gt_type_dual: Optional[str] = None
-    gt_type_sub: Optional[str] = None
-    gt_type_orig: Optional[str] = None
+    gt_type_greek: Optional[str] = None
+    gt_type_cls: Optional[str] = None
     gt_type_latin: Optional[str] = None
+
+    grp_count: Optional[int] = None
+
+
+
+def save_cutout(l: GTLine, o_name: str):
+    ofile = Path(o_name).with_suffix(".png")
+    comp = get_color_companion_cached(l.xml_file)
+    image = comp.crop(l.poly)
+    image.save(ofile, compression=1)
+
 
 
 @functools.lru_cache(maxsize=2)
@@ -47,8 +62,8 @@ def load_pxml(p: Path):
     return PageXMLParser.from_file(p,strictness=PageXMLParserMode.EASY).get_page()
 
 @functools.lru_cache(maxsize=1)
-def get_color_companion_cached(p: Path):
-    return get_color_companion(p)
+def get_color_companion_cached(p: str):
+    return get_color_companion(Path(p))
 
 
 valid_greek_old: Set[str] = {'ἶ', 'Κ', 'ἇ', 'γ', 'ξ', 'α', 'ἴ', 'ὴ', 'ἄ', 'ὶ', 'ἔ', 'ἥ', 'ἱ', 'ύ', 'ὠ', 'ʼ', 'ά', 'ἷ', 'Β', 'ή', 'Ξ', 'Γ', 'ἠ', 'μ', 'Ρ', 'υ', 'ώ', 'ὥ', 'ψ', 'Τ', 'ἦ', 'Χ', ' ', 'ᾳ', 'φ', 'ᾦ', 'Ν', 'ἑ', 'χ', ':', 'ὔ', 'ε', 'Ο', 'ϊ', 'θ', 'β', 'ὐ', 'ι', 'ἵ', 'ὃ', 'ὂ', '́', 'δ', 'Λ', 'ῷ', 'ΐ', 'ῆ', 'Υ', 'ἃ', 'ὰ', 'ρ', 'ἣ', '´', 'ί', 'ἐ', 'ᾒ', 'ὅ', 'ἓ', 'έ', '?', 'έ', 'ώ', 'ζ', 'ῇ', 'ᾴ', 'κ', 'Η', ',', 'ῥ', '.', ';', 'ἀ', 'π', 'ἰ', 'ὡ', 'ὺ', '΄', 'ᾀ', 'ύ', '·', 'ν', 'ὖ', 'Ζ', '-', 'ἁ', 'ὁ', 'ἧ', 'ῶ', '(', 'Μ', '*', 'ὓ', 'Α', 'ὑ', 'ό', 'σ', 'ό', '↵', 'ὗ', 'ὕ', 'λ', 'Ι', 'ὤ', 'ὣ', 'ὢ', "'", 'ὼ', 'ἆ', 'Ἀ', '"', 'ῃ', '·', 'ῖ', 'ὸ', 'ὒ', 'ῦ', 'ω', '᾿', 'Σ', 'ᾶ', 'ῄ', 'ς', 'η', 'Δ', 'ὄ', 'ᾧ', '&', 'ο', 'ἤ', 'ἕ', ')', 'ῤ', 'ἢ', 'ᾖ', 'ἂ', 'ἒ', 'ᾗ', 'ί', 'ὧ', 'Ω', 'ᾷ', 'ὀ', 'ὲ', 'ἅ', 'ϋ', 'Θ', 'ή', 'ὦ', 'ά', 'Ε', 'ᾄ', 'τ', 'ἳ', 'ῴ', 'Φ', 'ῳ', 'ἡ', 'Π'}
@@ -59,8 +74,16 @@ all_valid_greek = Set.union(valid_greek, symbols, numeric)
 def set_line_type_for_line(l: GTLine):
     if l.line_type == LineType.SKIPPED or l.line_type == LineType.REMOVED:
         return
+    if l.line_type != LineType.PENDING:
+        logger.error(f"Invalid line Type before setting line types for line {l}")
+        return
+    if l.greek and not l.latin:
+        logger.error(f"{l} has greek transcription but no latin GT, skipping")
+        l.line_type = LineType.REMOVED
+        return
     
-    if l.greek is None:
+    
+    if l.greek is None and l.latin is not None:
         if "@" in l.latin:
             l.line_type = LineType.REMOVED
             return
@@ -109,6 +132,7 @@ def set_line_type_for_line(l: GTLine):
         except ValueError:
             # TODO: fix invalid chars
             pass
+    
     if not has_latin_letters:
         l.line_type = LineType.GREEK
         return
@@ -137,7 +161,7 @@ def make_line_table(files: List[Path]):
                 latin=tl.text_equivs[TextEquiv.TEXT_ID_GROUND_TRUTH].text if TextEquiv.TEXT_ID_GROUND_TRUTH in tl.text_equivs else None,
                 greek=tl.text_equivs[TextEquiv.TEXT_ID_GREEK_CORRECTION].text if TextEquiv.TEXT_ID_GREEK_CORRECTION in tl.text_equivs else None,
                 poly=get_textline_polygon_bb(parent_region.polygon),
-                region_type=str(parent_region.region_text_type.value)
+                region_type=parent_region.region_text_type.value
             )
             all_lines.append(gtl)
 
@@ -158,9 +182,11 @@ def build_line_table(globs: List[str]):
 
     all_lines = make_line_table(files)
     fix_line_endings(all_lines)
+    
     for l in tqdm(all_lines,desc="Setting line types"):
         set_line_type_for_line(l)
-    
+        
+    build_gt_types(all_lines)
     df = pd.DataFrame([asdict(x) for x in all_lines])
 
     with pd.ExcelWriter("/tmp/ds4_out.xlsx",engine="openpyxl") as ew:
@@ -185,9 +211,89 @@ def fix_line_endings(lt: List[GTLine]):
             if lbpos != -1:
                 l.greek = l.greek[:lbpos]
 
+multiple_space_replace_regex = re.compile(r"\s\s+")
+multiple_repl_regex = re.compile(r"[@][@]+")
 
 def build_gt_types(lt: List[GTLine]):
     
+    for l in lt:
+        if l.line_type in {LineType.LATIN}:
+            # BUILD Latin GT
+            l.gt_type_latin = l.latin.strip()
+            l.gt_type_latin = multiple_space_replace_regex.sub(" ",l.gt_type_latin)
+
+        if l.line_type in {LineType.LATIN, LineType.GREEK, LineType.MIXED}:
+            # BUILD DUAL_LANG_GT
+            source = l.greek if l.greek is not None else l.latin
+            l.gt_type_dual = source.strip()
+            l.gt_type_dual = multiple_space_replace_regex.sub(" ",l.gt_type_dual)
+
+        if l.line_type in {LineType.LATIN, LineType.GREEK, LineType.MIXED}:
+            # BUILD CLS_LANG_GT
+            l.gt_type_cls = l.latin.strip() # TODO: optionally shrink
+            l.gt_type_cls = multiple_space_replace_regex.sub(" ", l.gt_type_cls)
+
+        if l.line_type in {LineType.GREEK, LineType.MIXED}:
+            # BUILD GT FOR GREEK
+            l.gt_type_greek = "".join( (x if x in valid_greek else "@") for x in l.greek)
+            # strip the text
+            l.gt_type_greek = l.gt_type_greek.strip()
+            l.gt_type_greek = multiple_repl_regex.sub("@", l.gt_type_greek)
+            l.gt_type_greek = multiple_space_replace_regex.sub(" ", l.gt_type_greek)
+
+
+
+def build_training_ds_n(line_table: List[GTLine]):
+    rng = random.Random(123456)
+    latin = [x for x in line_table if x.line_type == LineType.LATIN]
+    rng.shuffle(latin)
+    mixed = [x for x in line_table if x.line_type == LineType.MIXED] + [x for x in line_table if x.line_type == LineType.GREEK]
+    rng.shuffle(mixed)
+
+
+
+    for c in [latin,mixed]:
+        for i,x  in enumerate(c,start=0):
+            x.grp_count = i
+    
+    counts = [500, 1000, 2000, 4000, 10000000]
+    for count in counts:
+        ds_latin = sorted(latin[:count],key=lambda x: x.xml_file)
+        ds_mixed = sorted(mixed[:count], key=lambda x: x.xml_file)
+
+        o_dir = f"/home/norbert/uni/page-segment/GreekPaperNew/DS4/C{count}"
+        os.makedirs(o_dir, exist_ok=True)
+        os.makedirs(Path(o_dir) / "Latin", exist_ok=True)
+        os.makedirs(Path(o_dir) / "CLS", exist_ok=True)
+        os.makedirs(Path(o_dir) / "Greek", exist_ok=True)
+        os.makedirs(Path(o_dir) / "Dual", exist_ok=True)
+
+        # make the pure latin ds
+        for x in tqdm(ds_latin, desc=f"Latin {count}"):
+            o_name = Path(o_dir) / "Latin" / f"{x.line_id}_{Path(x.xml_file).name}.txt"
+            with open( o_name, "w") as f:
+                f.write(x.gt_type_latin)
+            save_cutout(x,o_name)
+        
+        for x in tqdm(ds_mixed + ds_latin, desc=f"CLS {count}"):
+            o_name = Path(o_dir) / "CLS" / f"{x.line_id}_{Path(x.xml_file).name}.txt"
+            with open( o_name, "w") as f:
+                f.write(x.gt_type_cls)
+            save_cutout(x,o_name)
+
+        for x in tqdm(ds_mixed, desc=f"Greek {count}"):
+            o_name = Path(o_dir) / "Greek" / f"{x.line_id}_{Path(x.xml_file).name}.txt"
+            with open( o_name, "w") as f:
+                f.write(x.gt_type_greek)
+            save_cutout(x,o_name)
+
+        for x in tqdm(ds_latin + ds_mixed, desc=f"Dual {count}"):
+            o_name = Path(o_dir) / "Dual" / f"{x.line_id}_{Path(x.xml_file).name}.txt"
+            with open( o_name, "w") as f:
+                f.write(x.gt_type_dual)
+            save_cutout(x,o_name)
+
+
 if __name__=="__main__":
     line_table = build_line_table(source_dirs)
 
@@ -195,3 +301,5 @@ if __name__=="__main__":
         print(f"COUNT({v}): {sum(1 for x in line_table if x.line_type == v)}")
     valid_line_types = {LineType.GREEK, LineType.MIXED, LineType.LATIN}
     filtered_line_table = [x for x in line_table if x.line_type in valid_line_types]
+
+    build_training_ds_n(filtered_line_table)
