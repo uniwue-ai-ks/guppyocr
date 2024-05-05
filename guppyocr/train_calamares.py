@@ -139,6 +139,8 @@ class TrainingOpts:
     layers: int = 2
     keep_prob: float = 1.0
     seq_len: int = 80
+    
+    save_every_epoch: bool = True
 
     def get_hyperparameters(self) -> dict:
         hparams_dict = asdict(self)
@@ -537,10 +539,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                     epoch, errors / total_chars))
                 f.write("Best CER (until now): {:.5f}\n".format(
                     best_total_cer))
-
-            total_cer = errors / total_chars
-            if total_cer < best_total_cer:
-                best_total_cer = total_cer
+            def save_model(model_file: Path):
                 state_dict = None
                 if torch.cuda.is_available() == True and opt.gpu == True:
                     state_dict = model.module.state_dict()
@@ -549,9 +548,18 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                 model_output_path = Path(output_path) / "model_best.pth"
                 mconfig.save(model_output_path, state_dict)
                 print(f"Saving model as {model_output_path}")
+            
+            total_cer = errors / total_chars
+            if total_cer < best_total_cer:
+                best_total_cer = total_cer
+                save_model(Path(output_path) / "model_best.pth")
                 epochs_without_improvement = 0
             else:
                 epochs_without_improvement += 1
+            
+            if opt.save_every_epoch:
+                os.makedirs(Path(output_path) / "mod_epochs", exist_ok=True)
+                save_model(Path(output_path) / "mod_epochs" / f"e_{epoch}.pth")
 
             if epochs_without_improvement > opt.early_stopping:
                 break
