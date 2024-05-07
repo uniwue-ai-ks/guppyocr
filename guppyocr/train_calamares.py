@@ -539,15 +539,15 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                     epoch, errors / total_chars))
                 f.write("Best CER (until now): {:.5f}\n".format(
                     best_total_cer))
+            
             def save_model(model_file: Path):
                 state_dict = None
                 if torch.cuda.is_available() == True and opt.gpu == True:
                     state_dict = model.module.state_dict()
                 else:
                     state_dict = model.state_dict()
-                model_output_path = Path(output_path) / "model_best.pth"
-                mconfig.save(model_output_path, state_dict)
-                print(f"Saving model as {model_output_path}")
+                mconfig.save(model_file, state_dict)
+                print(f"Saving model as {model_file}")
             
             total_cer = errors / total_chars
             if total_cer < best_total_cer:
