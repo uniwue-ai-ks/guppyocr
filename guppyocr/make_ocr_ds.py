@@ -200,7 +200,6 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
                     if lbpos != -1:
                         cutout.gt_text = cutout.gt_text[:lbpos]
                 if language_settings.squash_ats:
-                    raise RuntimeError("This should be disabled right now")
                     cutout.gt_text = re.sub(squash_ats_regex,"@",cutout.gt_text)
                 
                 try:
@@ -224,6 +223,7 @@ def main(args):
         LanguageSettings(disable_greek=args["--no-greek"],
                          cut_line_ending_mark=True,
                          filter_small_lines=3,
+                         squash_ats=args["--squash_ats"],
                          gt_id=int(args["--gt_id"]),
                          gt_fallback=int(args["--gt_fallback"]) if args["--gt_fallback"] is not None else None # may be None
                          ),
