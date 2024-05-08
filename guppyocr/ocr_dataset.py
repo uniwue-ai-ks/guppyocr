@@ -10,6 +10,8 @@ import PIL
 import PIL.Image
 import cv2
 import random
+from tqdm import tqdm
+
 
 
 
@@ -54,7 +56,7 @@ class PlainDatasetReader(IDatasetReader):
                 self.files.append(f.name)
         self.texts = dict()
         if load_text_when_building:
-            for i in range(len(self)):
+            for i in tqdm(range(len(self)), desc="Buffering texts"):
                 self.texts[i] = self.get_text(i)
 
     def list_files(self) -> List[str]:
