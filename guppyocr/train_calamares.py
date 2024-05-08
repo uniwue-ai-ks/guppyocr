@@ -227,7 +227,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 
     # build the vocabulary
     cmap, max_seq_len_ds = make_charmap_from_readers(
-        [reader_train, reader_val])
+        [reader_train, reader_val],use_tqdm=True)
 
     voc, char2id, id2char = cmap.charmap, cmap.char2id, cmap.id2char
     print("Training Vocabulary: ", voc)

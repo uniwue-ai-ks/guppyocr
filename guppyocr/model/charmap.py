@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Tuple
 
+from tqdm import tqdm
+
 from guppyocr.ocr_dataset import IDatasetReader
 
 
@@ -28,11 +30,15 @@ def save_charmap(out_path: Path, cmap: CharMap):
     with open(out_path, "w") as f:
         f.write((json.dumps(json_content)))
 
-def make_charmap_from_readers(readers: List[IDatasetReader]) -> Tuple[CharMap, int]:
+def make_charmap_from_readers(readers: List[IDatasetReader], use_tqdm=False) -> Tuple[CharMap, int]:
     all_chars = set()
     max_seq_len = 0
     for reader in readers:
-        for i in range(len(reader)):
+        if use_tqdm:
+            iterator = tqdm(range(len(reader)),desc="Building Charmap")
+        else:
+            iterator = range(len(reader))
+        for i in iterator:
             txt = reader.get_text(i).replace("\n","")
             if len(txt) > max_seq_len:
                 max_seq_len = len(txt)
