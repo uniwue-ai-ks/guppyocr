@@ -167,7 +167,9 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
         text_id=language_settings.gt_id,
         fallback_text_id=language_settings.gt_fallback
     )
-    filter = RegionFilter(region_type_blacklist={PageRegionTypes.IMAGE_REGION}, text_type_blacklist=set([PageXMLTextTypes.DROP_CAPITAL, PageXMLTextTypes.CAPITAL_WORD]))
+    filter = RegionFilter(
+        region_type_blacklist={PageRegionTypes.IMAGE_REGION}, 
+        text_type_blacklist=set([PageXMLTextTypes.DROP_CAPITAL, PageXMLTextTypes.CAPITAL_WORD]))
     
     if glob_input:
         xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in source_files_dirs]))
@@ -224,7 +226,8 @@ def main(args):
                          filter_small_lines=3,
                          gt_id=int(args["--gt_id"]),
                          gt_fallback=int(args["--gt_fallback"]) if args["--gt_fallback"] is not None else None # may be None
-                         )
+                         ),
+        ds_prefix=args["--prefix"]
         )
 
 
