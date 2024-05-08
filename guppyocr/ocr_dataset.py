@@ -46,12 +46,16 @@ class IDatasetWriter(ABC):
 
 
 class PlainDatasetReader(IDatasetReader):
-    def __init__(self, root_dir: Path):
+    def __init__(self, root_dir: Path, load_text_when_building: bool = True):
         self.root_dir = root_dir
         self.files = []
         for f in self.root_dir.iterdir():
             if f.suffix == ".txt":
                 self.files.append(f.name)
+        self.texts = dict()
+        if load_text_when_building:
+            for i in range(len(self)):
+                self.texts[i] = self.get_text(i)
 
     def list_files(self) -> List[str]:
         return self.files
@@ -62,6 +66,9 @@ class PlainDatasetReader(IDatasetReader):
         return img
 
     def get_text(self, idx: int) -> str:
+        if idx in self.texts:
+            return self.texts[idx]
+        
         with open((self.root_dir / self.files[idx])) as f:
             return f.read()
     
