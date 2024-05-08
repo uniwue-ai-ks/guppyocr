@@ -167,7 +167,7 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
         text_id=language_settings.gt_id,
         fallback_text_id=language_settings.gt_fallback
     )
-    filter = RegionFilter(text_type_blacklist=set([PageXMLTextTypes.DROP_CAPITAL, PageXMLTextTypes.CAPITAL_WORD]))
+    filter = RegionFilter(region_type_blacklist={PageRegionTypes.IMAGE_REGION}, text_type_blacklist=set([PageXMLTextTypes.DROP_CAPITAL, PageXMLTextTypes.CAPITAL_WORD]))
     
     if glob_input:
         xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in source_files_dirs]))
