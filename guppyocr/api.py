@@ -1,5 +1,7 @@
-from typing import Union, Tuple
+from itertools import islice
+from typing import Iterable, Iterator, List, Union, Tuple
 
+import numpy as np
 import torch
 
 from abc import ABC, abstractmethod
@@ -52,6 +54,24 @@ class GuppyOCR(OCREngineBase):
             prediction, _, _, _ = self.model.forward(img, None)
             decoded_tgt = decode_ctc(prediction[0], self.mc.mconfig.id2char)
         return decoded_tgt
+    
+    def ocr_batched(self, cutouts: Iterator[numpy.typing.ArrayLike], batchsize=8) -> Iterable[str]:
+        while True:
+            inp_batch = list(islice(cutouts,batchsize))
+            if not inp_batch:
+                break
+
+            imgs = [preprocess_image(cutout, self.mc.mconfig.Width, self.mc.mconfig.Height)[0] for cutout in inp_batch]
+            # make a batch
+            batch = torch.stack(imgs)
+            with torch.no_grad():
+                batch = batch.to(self.device)
+                prediction, _, _, _ = self.model.forward(batch,None)
+                for i, _ in enumerate(inp_batch):
+                    decoded_tgt = decode_ctc(prediction[i], self.mc.mconfig.id2char)
+                    yield decoded_tgt
+
+        
 
     def ocr_with_char_position(self, cutout: numpy.typing.ArrayLike) -> Tuple[DecoderOutput, float]:
         if not len(cutout.shape) == 3:
@@ -77,4 +97,3 @@ class GuppyOCR(OCREngineBase):
                     cutout.shape[1] / self.mc.mconfig.Width) / (net_out.shape[0] * delta)
 
             return sentence, local_to_global_pos_factor
-
