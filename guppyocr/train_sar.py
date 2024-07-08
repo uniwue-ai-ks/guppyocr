@@ -127,10 +127,12 @@ if __name__ == '__main__':
     feature_height = Height // 4
     feature_width = Width // 8
     Channel = 3
+    print("Making charpmap...")
     cmap = make_charmap_from_input_dirs([str(Path(opt.dataset)/"")])
     voc, char2id, id2char = cmap.charmap, cmap.char2id, cmap.id2char
-
     output_classes = len(voc)
+    print(f"Charmap created: {voc}")
+    print(f"Length: {len(voc)}")
     embedding_dim = 512
     hidden_units = 512
     layers = 2

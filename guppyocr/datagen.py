@@ -142,7 +142,7 @@ RandomNumberGen = Sequential([
 
 from abc import ABC, abstractmethod
 
-OUTPUT_DIR="/tmp/german_train1/"
+OUTPUT_DIR="/tmp/german_train2"
 
 def mp_generate(arg):
     text, font, i = arg
@@ -157,17 +157,33 @@ def mp_generate(arg):
         #size=48,
         skewing_angle=OneOf([
             (1, lambda x: 1),
+            (1, lambda x: 2),
             (1, lambda x: 0)
             ])(None),
         random_skew=True,
         fonts=[font],
-        background_type=OneOf([(3,lambda x: 0),(1,lambda x: 2)])(None),
+        background_type=random.randint(0,3),
         margins=OneOf([ # Top, left, bottom, right
             (1, lambda x: (5, leftm, 5, rightm)),
             (1, lambda x: (3, leftm, 3, rightm)),
             (1, lambda x: (3, leftm, 3, rightm)),
             (1, lambda x: (1, rightm, 1, rightm)),
         ])(None),
+        image_dir="/home/norbert/uni/page-segment/guppyocr/guppyocr/backgrounds",
+        text_color=random.choice([
+            "#000000",
+            "#282828",
+            "#A0A0A0",
+            "#182018",
+            "#101010",
+            "#050505",
+            "#051012",
+            "#100802",
+            "#323718",
+            "#320815",
+            "#184718",
+            "#182549"
+        ])
     )
     try:
         img, _ = gen.next()
@@ -193,16 +209,21 @@ def main():
     RandomStringGenerator = \
     Sequential([
         lambda x: [],
-        Repeat(1,5, OneOf([
+        Repeat(2,5, OneOf([
             (1, lambda x: x + [RandomNumberGen([])]),
             (1, lambda x: x + [random.choice(words)]),
+            (1, lambda x: x + [random.choice(german_words)]),
             (0.2, lambda x: x + ["-"]),
             (0.2, lambda x: x + [","])
         ])),
         lambda x: [y.replace("\n","") for y in x],
         lambda x: " ".join(x),
         lambda x: x.replace(" - ",""),
+        lambda x: x.replace(" -",""),
         lambda x: x.replace(" ,", ","),
+        lambda x: x.replace(" .", "."),
+        lambda x: x.replace(" !", "!"),
+        lambda x: x.replace(" ?", "?"),
     ])
 
     RandomWordGenerator = \
@@ -217,7 +238,10 @@ def main():
     data_strings = []
     for i in tqdm(range(100000)):
         #data_strings.append(RandomStringGenerator(None))
-        data_strings.append(RandomWordGenerator(None))
+        if random.random() < 0.5:
+            data_strings.append(RandomWordGenerator(None))
+        else:
+            data_strings.append(RandomStringGenerator([]))
 
 
     #fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/sar-pytorch/fonts/").iterdir()]
@@ -251,5 +275,5 @@ def convert_to_doctr_json(dir: Path):
         json.dump(labels,json_f)
     
 if __name__ == "__main__":
-    convert_to_doctr_json(Path("/home/norbert/uni/page-segment/Datensets/funsd/training_words"))
-    #main()f
+    #convert_to_doctr_json(Path("/home/norbert/uni/page-segment/Datensets/funsd/training_words"))
+    main()
