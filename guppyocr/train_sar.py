@@ -41,6 +41,7 @@ def end_cut(indices, char2id, id2char):
     '''
     cut_indices = []
     for id in indices:
+        id = int(id)
         if id != char2id['END']:
             if id != char2id['UNK'] and id != char2id['PAD']:
                 cut_indices.append(id2char[id])
