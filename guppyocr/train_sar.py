@@ -137,7 +137,7 @@ if __name__ == '__main__':
     hidden_units = 512
     layers = 2
     keep_prob = 1.0
-    seq_len = 80
+    seq_len = 96
     epochs = opt.epoch
     worker = opt.worker
     dataset_path = opt.dataset
