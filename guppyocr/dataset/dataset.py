@@ -194,7 +194,7 @@ class MySimpleDataset(data.Dataset):
                 gt = self.reader.get_text(i)
                 self.dataset.append((i, gt))
         if augment:
-            self.transform= get_transform("new")
+            self.transform= get_transform("old")
             self.augment = augment
         else:
             self.augment = None

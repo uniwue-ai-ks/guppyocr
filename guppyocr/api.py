@@ -55,7 +55,8 @@ class GuppyOCR(OCREngineBase):
             decoded_tgt = decode_ctc(prediction[0], self.mc.mconfig.id2char)
         return decoded_tgt
     
-    def ocr_batched(self, cutouts: Iterator[numpy.typing.ArrayLike], batchsize=8) -> Iterable[str]:
+    def ocr_batched(self, cutouts: Union[Iterator[numpy.typing.ArrayLike], Iterable[numpy.typing.ArrayLike]], batchsize=8) -> Iterable[str]:
+        cutouts = iter(cutouts)
         while True:
             inp_batch = list(islice(cutouts,batchsize))
             if not inp_batch:
