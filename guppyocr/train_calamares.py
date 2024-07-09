@@ -548,6 +548,12 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                     state_dict = model.state_dict()
                 mconfig.save(model_file, state_dict)
                 print(f"Saving model as {model_file}")
+
+                # save also the optimizer state
+                opt_state_path = model_file.with_suffix(".pth.optim")
+                torch.save({
+                    "optimizer_state_dict": optimizer.state_dict
+                }, opt_state_path)
             
             total_cer = errors / total_chars
             if total_cer < best_total_cer:
