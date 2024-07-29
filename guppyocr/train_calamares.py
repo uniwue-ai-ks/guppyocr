@@ -9,6 +9,8 @@ from typing import List, Dict, Tuple, Optional
 
 import editdistance
 import numpy as np
+from regex import D
+from sqlalchemy import all_
 import tqdm
 from adabelief_pytorch import AdaBelief
 from fast_ctc_decode import viterbi_search
@@ -141,6 +143,9 @@ class TrainingOpts:
     seq_len: int = 80
     
     save_every_epoch: bool = True
+    crossfold: int = 0
+    fold: int = 0
+
 
     def get_hyperparameters(self) -> dict:
         hparams_dict = asdict(self)
@@ -190,11 +195,42 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
 
     return reader_train, reader_val
 
-
 @dataclass
 class TrainingResult:
     best_model_path: Path
     best_val_cer: float
+
+
+def make_crossfold(train_ds: data.Dataset, val_ds: data.Dataset, opts: TrainingOpts) -> Tuple[data.Dataset, data.Dataset]:
+    if opts.crossfold <= 0: return train_ds, val_ds
+    # else, check if this is viable
+    if opts.val_dataset: raise RuntimeError("Cannot specify val_dataset with crossfold training")
+    if opts.split_val is not None: raise RuntimeError("Cannot specify split_val with crossfold training")
+
+    # okay, make a subset for training and validation
+    all_indices = list(range(len(train_ds)))
+    rng = random.Random(123)
+    rng.shuffle(all_indices)
+
+    len_part = len(all_indices) // opts.crossfold
+
+    parts = []
+    for fold_i in range(opts.crossfold):
+        if fold_i != opts.crossfold - 1:
+            parts.append(all_indices[fold_i * len_part: (fold_i+1) * len_part])
+        else:
+            parts.append(all_indices[fold_i * len_part : ])
+    
+    new_val_ds = data.Subset(train_ds,parts.pop(opts.fold))
+    new_train_ds = data.Subset(train_ds, list(itertools.chain.from_iterable(parts)))
+    
+    print(f"Using crossfold training ({opts.fold} / {opts.crossfold}) with {len(new_train_ds)} train and {len(new_val_ds)} validation samples")
+
+    return new_train_ds, new_val_ds
+
+
+
+
 
 
 def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
@@ -302,6 +338,9 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
     test_dataset = dataset.MySimpleDataset(
         reader_val, Height, Width, seq_len, char2id, augment=False)
 
+    if training_opts.crossfold > 0:
+        train_dataset, test_dataset = make_crossfold(train_dataset,test_dataset,training_opts)
+    
     # make dataloader
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -332,7 +371,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
     #
     if opt.optimizer == "AdaBelief":
         optimizer = AdaBelief(model.parameters(),
-                              print_change_log=False, lr=opt.lr)
+                              print_change_log=False, lr=opt.lr, weight_decay=1)
     elif opt.optimizer == "Adam":
         import torch.optim as optim
         optimizer = optim.Adam(model.parameters(), lr=opt.lr)
@@ -636,6 +675,9 @@ if __name__ == '__main__':
                         help='Dropout keep probability (default: 1.0)')
     parser.add_argument('--seq_len', type=int, default=80,
                         help='Sequence length (default: 80)')
+    parser.add_argument("--crossfold", type=int, default=0, help="Number of folds")
+    parser.add_argument("--fold", type=int, default=0, help="Current fold")
+
     import sys
     print(sys.argv)
     args = parser.parse_args()
@@ -664,6 +706,8 @@ if __name__ == '__main__':
         hidden_units=args.hidden_units,
         layers=args.layers,
         keep_prob=args.keep_prob,
-        seq_len=args.seq_len
+        seq_len=args.seq_len,
+        crossfold=args.crossfold,
+        fold=args.fold
     )
     train_model(training_opts)
