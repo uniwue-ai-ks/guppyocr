@@ -5,8 +5,9 @@ import itertools
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import Collection, List, Dict, NamedTuple, Tuple, Optional
 
+from click import Option
 import editdistance
 import numpy as np
 from regex import D
@@ -28,9 +29,9 @@ from torch.utils.tensorboard import SummaryWriter
 # internal package
 from guppyocr.dataset import dataset
 
-from torch import nn
+from torch import is_grad_enabled, nn
 
-from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers
+from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers, merge_charmaps
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
 from guppyocr.ocr_dataset import IDatasetReader, SplitDatasetAdaptor, make_dataset_reader
 
@@ -62,46 +63,6 @@ def decode_gt(gt, id2char) -> str:
             continue
         gt_chars.append(trans)
     return "".join(gt_chars)
-
-
-def test_model(model, test_dataloader):
-    print_indices = set(range(len(test_dataloader)))
-    with torch.set_grad_enabled(False):
-        CER_SUM = []
-        total_chars: int = 0
-        errors: int = 0
-
-        for i, data in tqdm.tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
-            x = data[0]  # [B, C, H, W]
-            y = data[1]  # [batch_size, seq_len, output_classes]
-            x, y = x.to(device), y.to(device)
-            model = model.eval()
-            predict, _, _, _ = model(x, None)
-
-            target = y.max(2)[1]  # [batch_size, seq_len]
-            try:
-                target_firstpad = (target[0] == char2id["PAD"]).nonzero(
-                    as_tuple=True)[0][0]
-                target = target[:, :target_firstpad]
-            except IndexError as e:
-                pass
-
-            decoded_gt = decode_gt(target[0], id2char)
-            decoded_tgt = decode_ctc(predict[0], id2char)
-            edit_distance = editdistance.distance(decoded_tgt, decoded_gt)
-            CER = edit_distance / max(1, len(decoded_gt))
-            total_chars += max(1, len(decoded_gt))
-            errors += edit_distance
-            CER_SUM.append(CER)
-            if i in print_indices:
-                print(f"GT:   {decoded_gt}")
-                print(f"Pred: {decoded_tgt}")
-                print(f"  CER = {CER:.5f}")
-
-        print(
-            "Model pre-test  average CER: {:.5f}".format(float(np.mean(CER_SUM))))
-        print("Model pre-test  total CER: {:.5f}".format(errors / total_chars))
-
 
 class MetricAggregator:
     def __init__(self):
@@ -142,9 +103,11 @@ class TrainingOpts:
     keep_prob: float = 1.0
     seq_len: int = 80
     
-    save_every_epoch: bool = True
+    save_every_epoch: bool = False
     crossfold: int = 0
     fold: int = 0
+
+    l2_regularizer: Optional[float] = None
 
 
     def get_hyperparameters(self) -> dict:
@@ -229,6 +192,76 @@ def make_crossfold(train_ds: data.Dataset, val_ds: data.Dataset, opts: TrainingO
     return new_train_ds, new_val_ds
 
 
+class TestModelResult(NamedTuple):
+    mean_cer: float
+    total_cer: float
+    accuracy: float
+
+def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: torch.utils.data.DataLoader, 
+               device, batch_size, epoch: int, num_batch: int,
+               test_ignore_chars: Optional[Collection[str]]= None,
+               writer: Optional[SummaryWriter] = None, print_random_indices: bool = True) -> TestModelResult:
+    
+    assert not torch.is_grad_enabled(), "For testing the model, autograd should be turned off"
+    char2id, id2char = mc.mconfig.char2id, mc.mconfig.id2char
+
+    if test_ignore_chars is None:
+        test_ignore_chars = set()
+    
+    print_indices = set(random.choices(
+            list(range(len(test_dataloader)*batch_size)), k=10))
+    
+    CER_SUM = []
+    total_chars: int = 0
+    errors: int = 0
+    model = model.eval()
+
+    for i, data in tqdm.tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
+        x = data[0]  # [batch_size, Channel, Height, Width]
+        y = data[1]  # [batch_size, seq_len, output_classes]
+        #y_np = y.numpy()
+        x, y_gpu = x.to(device), y.clone().to(device)
+
+        predict, _, _, _ = model(x, y_gpu)
+        # prediction evaluation
+        #pred_choice = predict.max(2)[1]  # [batch_size, seq_len]
+        #pred_decoded = predict.argmax(dim=2)
+        target = (y.max(2)[1])  # [batch_size, seq_len]
+        for batch_i in range(int(x.shape[0])):
+            this_target = target[batch_i]
+            try:
+                target_firstpad = (this_target == char2id["PAD"]).nonzero(as_tuple=True)[0][0]
+                this_target = this_target[:target_firstpad]
+            except IndexError as e:
+                pass
+
+            decoded_gt = decode_gt(this_target, id2char)
+            decoded_tgt = decode_ctc(predict[batch_i], id2char)
+            decoded_gt_eval = decoded_gt
+            decoded_tgt_eval = decoded_tgt
+            for c in test_ignore_chars:
+                decoded_gt_eval = decoded_gt_eval.replace(c, '')
+                decoded_tgt_eval = decoded_tgt_eval.replace(c, '')
+            edit_distance = editdistance.distance(
+                decoded_tgt_eval, decoded_gt_eval)
+            
+            CER = edit_distance / max(1, len(decoded_gt_eval))
+            total_chars += max(1, len(decoded_gt_eval))
+            errors += edit_distance
+            CER_SUM.append(CER)
+            if batch_i + i * batch_size in print_indices:
+                if print_random_indices:
+                    print(f"GT:   {decoded_gt}")
+                    print(f"Pred: {decoded_tgt}")
+                    print(f"  CER = {CER:.5f}")
+                # write example to tensorboard
+                if writer:
+                    writer.add_text(
+                        f"GT_{i}", decoded_gt, epoch * num_batch)
+                    writer.add_text(
+                        f"Pred_{i}", decoded_tgt, epoch * num_batch)
+    CER_arr = np.array(CER_SUM) 
+    return TestModelResult(float(np.mean(CER_arr)),float(errors / total_chars),float(np.count_nonzero(CER_arr == 0.0) / CER_arr.shape[0]))
 
 
 
@@ -262,8 +295,20 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
     reader_train, reader_val = make_readers(opt)
 
     # build the vocabulary
-    cmap, max_seq_len_ds = make_charmap_from_readers(
-        [reader_train, reader_val],use_tqdm=True)
+    
+    cmap_train, cmap_sl_train = make_charmap_from_readers([reader_train], use_tqdm=True)
+    cmap_test, cmap_sl_test  = make_charmap_from_readers([reader_val], use_tqdm=True)
+
+    if not set(cmap_train.charmap).issuperset(set(cmap_test.charmap)):
+        print("WARNING: Test set contains Chars not available in train")
+        print(f"Missing Chars: {''.join(set(cmap_train.charmap) - set(cmap_test.charmap))}")
+    
+    cmap = merge_charmaps([cmap_train, cmap_test])
+    max_seq_len_ds = max(cmap_sl_train, cmap_sl_test)
+    del cmap_train, cmap_test, cmap_sl_test, cmap_sl_train
+
+    #cmap, max_seq_len_ds = make_charmap_from_readers(
+    #    [reader_train, reader_val],use_tqdm=True)
 
     voc, char2id, id2char = cmap.charmap, cmap.char2id, cmap.id2char
     print("Training Vocabulary: ", voc)
@@ -338,8 +383,8 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
     test_dataset = dataset.MySimpleDataset(
         reader_val, Height, Width, seq_len, char2id, augment=False)
 
-    if training_opts.crossfold > 0:
-        train_dataset, test_dataset = make_crossfold(train_dataset,test_dataset,training_opts)
+    if opt.crossfold > 0:
+        train_dataset, test_dataset = make_crossfold(train_dataset,test_dataset,opt)
     
     # make dataloader
     train_dataloader = torch.utils.data.DataLoader(
@@ -366,18 +411,19 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 
     if opt.test_loaded_model and trained_model_path:
         print("Testing trained model")
-        test_model(model, test_dataloader)
+        test_model(mconfig, model, test_dataloader, device, batch_size,0,0,opt.test_ignore_chars,None,True)
 
-    #
-    if opt.optimizer == "AdaBelief":
+    if opt.optimizer.lower() == "adabelief":
         optimizer = AdaBelief(model.parameters(),
-                              print_change_log=False, lr=opt.lr, weight_decay=1)
-    elif opt.optimizer == "Adam":
+                              print_change_log=False, lr=opt.lr, weight_decay=opt.l2_regularizer if opt.l2_regularizer else 0)
+    elif opt.optimizer.lower() == "adam":
         import torch.optim as optim
         optimizer = optim.Adam(model.parameters(), lr=opt.lr)
-    elif opt.optimizer == "SGD":
+        assert not opt.l2_regularizer
+    elif opt.optimizer.lower/() == "sgd":
         import torch.optim as optim
         optimizer = optim.SGD(model.parameters(), lr=opt.lr)
+        assert not opt.l2_regularizer
     else:
         raise RuntimeError("Invalid optimizer specified")
 
@@ -386,6 +432,8 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
         scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lmbda)
     else:
         scheduler = None
+    import torch.optim as optim
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer,0.0001, 0.001,step_size_up=len(train_dataloader) // 2, step_size_down=len(train_dataloader) // 2,cycle_momentum=False)
 
     num_batch = math.ceil(len(train_dataset) / batch_size)
 
@@ -396,7 +444,6 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
     best_total_cer = float("inf")
 #   model.module.rnn[-1].
     epochs_without_improvement = 0
-    detailed_results = []
 
     writer.add_hparams(opt.get_hyperparameters(),dict())
     for epoch in range(epochs):
@@ -451,15 +498,8 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                                                                                                  target_lengths=target_lengths)
             loss_avg.append(float(loss))
 
-            # from torch.nn.functional import ctc_loss
-            # print("test")
-            # print(ctc_loss(
-            #    torch.as_tensor([[0.0,0.0,1.0],[0.0,0.0,1.0],[0.0,0.0,1.0],[0.0,1.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]]),
-            #    torch.as_tensor([2,1,1,2]),
-            #    torch.as_tensor([6]),
-            #    torch.as_tensor([4])))
-
             loss.backward()
+
             if opt.grad_clip:
                 """
                 total_norm = 0
@@ -471,113 +511,41 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                 """
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step()
-            # prediction evaluation
-            pred_choice = predict.max(2)[1]  # [batch_size, seq_len]
+
+            if scheduler is not None:
+                scheduler.step()
 
             writer.add_scalar('Loss/train', loss.item(), epoch * num_batch + i)
 
-            progress.desc = f'[Epoch {epoch}: {i}/{num_batch}] train loss: {np.mean(loss_avg):.3f}'
-            # print("predict prob:", predict[0][0])
-            # print("predict words:", predict_words[0])
-            # print("labeled words:", labeled_words[0])
-        print("Epoch {} average loss: {:.5f} ".format(
-            epoch, float(np.mean(loss_avg))))
+            progress.desc = f"[Epoch {epoch}: {i}/{num_batch}] train loss: {np.mean(loss_avg):.3f}  LR: {optimizer.param_groups[0]['lr']}"
+        
+        print(f"Epoch {epoch} average loss: {float(np.mean(loss_avg)):.5f} ")
 
-        if scheduler is not None:
-            scheduler.step()
+        #if scheduler is not None: # WHY is this here, this should update after every optimizer step (unless per_epoch scheduling ist used)
+        #    scheduler.step()
 
-        def print_val(gt, pred, id2char):
-            # reverse char2id
-            # id2char = {v:k for k,v in id2char.items()}
-            gt_chars = []
-            pred_chars = []
-            alphabet = [0] * len(id2char)
-            net_out = pred.cpu().numpy()
-            print(net_out.shape)
-            for k, v in id2char.items():
-                alphabet[k] = v
-            print("Alph: ", len(alphabet))
-            print(alphabet)
-            seq, _ = viterbi_search(net_out, alphabet)
-            for x in gt:
-                gt_chars.append(id2char[int(x)])
-            print("GT: " + "".join(gt_chars))
-            print("Pred ", seq)
-
-        if epoch < 20:
-            # continue
-            pass
         # Validation
         print("Testing......")
-        print_indices = set(random.choices(
-            list(range(len(test_dataloader)*batch_size)), k=10))
+        
         with torch.set_grad_enabled(False):
-            CER_SUM = []
-            total_chars: int = 0
-            errors: int = 0
-            model = model.eval()
-            for i, data in tqdm.tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
-                x = data[0]  # [batch_size, Channel, Height, Width]
-                y = data[1]  # [batch_size, seq_len, output_classes]
-                #y_np = y.numpy()
-                x, y_gpu = x.to(device), y.clone().to(device)
+            val_result = test_model(mconfig,model,test_dataloader,device,batch_size,epoch,num_batch,opt.test_ignore_chars,writer,print_random_indices=True)
 
-                predict, _, _, _ = model(x, y_gpu)
-                # prediction evaluation
-                #pred_choice = predict.max(2)[1]  # [batch_size, seq_len]
-                #pred_decoded = predict.argmax(dim=2)
-                target = (y.max(2)[1])  # [batch_size, seq_len]
-                for batch_i in range(int(x.shape[0])):
-                    #target = target.to("cpu")
-                    # print(target_firstpad)
-                    # if i % 64 == 0:
-                    #    print_val(target[0], predict[0], id2char)
-                    this_target = target[batch_i]
-                    try:
-                        target_firstpad = (this_target == char2id["PAD"]).nonzero(as_tuple=True)[0][0]
-                        this_target = this_target[:target_firstpad]
-                    except IndexError as e:
-                        pass
+            writer.add_scalar('CER/val mean', val_result.mean_cer,
+                                epoch * num_batch + i)
+            writer.add_scalar('CER/val total', val_result.total_cer,
+                                epoch * num_batch + i)
 
-                    decoded_gt = decode_gt(this_target, id2char)
-                    decoded_tgt = decode_ctc(predict[batch_i], id2char)
-                    decoded_gt_eval = decoded_gt
-                    decoded_tgt_eval = decoded_tgt
-                    for c in opt.test_ignore_chars:
-                        decoded_gt_eval = decoded_gt_eval.replace(c, '')
-                        decoded_tgt_eval = decoded_tgt_eval.replace(c, '')
-                    edit_distance = editdistance.distance(
-                        decoded_tgt_eval, decoded_gt_eval)
-                    CER = edit_distance / max(1, len(decoded_gt_eval))
-                    total_chars += max(1, len(decoded_gt_eval))
-                    errors += edit_distance
-                    CER_SUM.append(CER)
-                    if batch_i + i * batch_size in print_indices:
-                        print(f"GT:   {decoded_gt}")
-                        print(f"Pred: {decoded_tgt}")
-                        print(f"  CER = {CER:.5f}")
-                        # write example to tensorboard
-                        writer.add_text(
-                            f"GT_{i}", decoded_gt, epoch * num_batch)
-                        writer.add_text(
-                            f"Pred_{i}", decoded_tgt, epoch * num_batch)
+            print(f"Epoch {epoch} average CER: {val_result.mean_cer :.5f}")
+            print(f"Epoch {epoch} total CER: {val_result.total_cer :.5f}")
 
-            writer.add_scalar('CER/val mean', float(np.mean(CER_SUM)),
-                              epoch * num_batch + i)
-            writer.add_scalar('CER/val total', errors / total_chars,
-                              epoch * num_batch + i)
-
-            print("Epoch {} average CER: {:.5f}".format(
-                epoch, float(np.mean(CER_SUM))))
-            print("Epoch {} total CER: {:.5f}".format(
-                epoch, errors / total_chars))
-            with open(os.path.join(output_path, 'statistics.txt'), 'a') as f:
-                f.write("TEST CER Epoch {} {}\n".format(
-                    epoch, float(np.mean(CER_SUM))))
-                f.write("Epoch {} total CER: {:.5f}\n".format(
-                    epoch, errors / total_chars))
-                f.write("Best CER (until now): {:.5f}\n".format(
-                    best_total_cer))
+            with open(os.path.join(output_path, 'statistics.csv'), 'a') as f:
+                f.write(f"{epoch}, {val_result.mean_cer}, {val_result.total_cer}, {best_total_cer}\n")
+                #f.write("TEST CER Epoch {} {}\n".format(
+                #    epoch, )))
+                #f.write("Epoch {} total CER: {:.5f}\n".format(
+                #    epoch, errors / total_chars))
+                #f.write("Best CER (until now): {:.5f}\n".format(
+                #    best_total_cer))
             
             def save_model(model_file: Path):
                 state_dict = None
@@ -594,9 +562,8 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                     "optimizer_state_dict": optimizer.state_dict
                 }, opt_state_path)
             
-            total_cer = errors / total_chars
-            if total_cer < best_total_cer:
-                best_total_cer = total_cer
+            if val_result.total_cer < best_total_cer:
+                best_total_cer = val_result.total_cer
                 save_model(Path(output_path) / "model_best.pth")
                 epochs_without_improvement = 0
             else:
@@ -677,6 +644,7 @@ if __name__ == '__main__':
                         help='Sequence length (default: 80)')
     parser.add_argument("--crossfold", type=int, default=0, help="Number of folds")
     parser.add_argument("--fold", type=int, default=0, help="Current fold")
+    parser.add_argument("--l2_regularizer", type=float, default=0, help="Set L2 regularization (weight decay)")
 
     import sys
     print(sys.argv)
@@ -708,6 +676,7 @@ if __name__ == '__main__':
         keep_prob=args.keep_prob,
         seq_len=args.seq_len,
         crossfold=args.crossfold,
-        fold=args.fold
+        fold=args.fold,
+        l2_regularizer=args.l2_regularizer
     )
     train_model(training_opts)

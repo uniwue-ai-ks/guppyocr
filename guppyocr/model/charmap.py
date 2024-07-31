@@ -52,6 +52,17 @@ def make_charmap_from_readers(readers: List[IDatasetReader], use_tqdm=False) -> 
     char2id = dict(zip(charmap, itertools.count()))
     return CharMap(charmap,char2id=char2id,id2char=id2char), max_seq_len
 
+def merge_charmaps(charmaps: List[CharMap]) -> CharMap:
+    all_chars = set()
+    for cm in charmaps:
+        all_chars = all_chars + set(cm.charmap)
+    all_chars = sorted(all_chars - {"PAD", "UNK", "END"})
+
+    charmap = ["PAD"] + all_chars + ["UNK", "END"]
+    id2char = dict(zip(itertools.count(), charmap))
+    char2id = dict(zip(charmap, itertools.count()))
+    return CharMap(charmap,char2id=char2id,id2char=id2char)
+
 def make_charmap_from_input_dirs(dirs: List[str]) -> CharMap:
     all_chars = set()
     for dir in dirs:
