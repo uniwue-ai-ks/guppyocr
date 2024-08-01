@@ -7,11 +7,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Collection, List, Dict, NamedTuple, Tuple, Optional
 
-from click import Option
 import editdistance
 import numpy as np
-from regex import D
-from sqlalchemy import all_
 import tqdm
 from adabelief_pytorch import AdaBelief
 from fast_ctc_decode import viterbi_search
