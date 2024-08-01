@@ -55,7 +55,7 @@ def make_charmap_from_readers(readers: List[IDatasetReader], use_tqdm=False) -> 
 def merge_charmaps(charmaps: List[CharMap]) -> CharMap:
     all_chars = set()
     for cm in charmaps:
-        all_chars = all_chars + set(cm.charmap)
+        all_chars.update(cm.charmap)
     all_chars = sorted(all_chars - {"PAD", "UNK", "END"})
 
     charmap = ["PAD"] + all_chars + ["UNK", "END"]
