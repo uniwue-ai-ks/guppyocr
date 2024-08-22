@@ -35,6 +35,7 @@ Options:
     --glob                  Glob Image Files instead of iterating
     --gt_id=ID              ID for TextEquivs
     --gt_fallback=ID        Fallback GT ID
+    --filter_small_lines=N  Remove all GT Lines with Less than N chars (0 for disable) [default: 3]
 """
 
 class FilenameEnumerator:
@@ -222,7 +223,7 @@ def main(args):
         args["<pagexmls>"],args["--glob"],
         LanguageSettings(disable_greek=args["--no-greek"],
                          cut_line_ending_mark=True,
-                         filter_small_lines=3,
+                         filter_small_lines=int(args["--filter_small_lines"]),
                          squash_ats=args["--squash_ats"],
                          gt_id=int(args["--gt_id"]) if args["--gt_id"] is not None else TextEquiv.TEXT_ID_GROUND_TRUTH,
                          gt_fallback=int(args["--gt_fallback"]) if args["--gt_fallback"] is not None else None # may be None

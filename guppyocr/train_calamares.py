@@ -532,7 +532,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
             writer.add_scalar('CER/val total', val_result.total_cer,
                                 epoch * num_batch + i)
 
-            print(f"Epoch {epoch} average CER: {val_result.mean_cer :.5f}")
+            #print(f"Epoch {epoch} average CER: {val_result.mean_cer :.5f}") # This is absolutely misleading and not required
             print(f"Epoch {epoch} total CER: {val_result.total_cer :.5f}")
 
             with open(os.path.join(output_path, 'statistics.csv'), 'a') as f:
