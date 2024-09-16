@@ -24,7 +24,6 @@ class ModelParameters:
     id2char: dict
     leaky_relu: bool = False
     dropout: float = 0.3
-
 class ModelConfiguration:
     def __init__(self, mconfig: ModelParameters):
         self.mconfig = mconfig

@@ -1,3 +1,4 @@
+from csv import Dialect
 import os
 
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0" # set GPU id at the very begining
@@ -15,7 +16,7 @@ from torch import is_grad_enabled, nn
 
 from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_from_readers
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
-from guppyocr.ocr_dataset import IDatasetReader, SplitDatasetAdaptor, make_dataset_reader
+from guppyocr.ocr_dataset import IDatasetReader, PlainDatasetReader, SplitDatasetAdaptor, make_dataset_reader
 
 from guppyocr.train_calamares import test_model
 
@@ -31,9 +32,12 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str,
                         required=True, help="dataset path")
     parser.add_argument("--worker", type=int, default=4, help="Number of data loader workers")
+    parser.add_argument("--csv", type=str, required=False)
+    parser.add_argument("--json", type=str, required=False)
+
     
     args = parser.parse_args()
-    reader = make_dataset_reader(Path(args.dataset))
+    reader: PlainDatasetReader = make_dataset_reader(Path(args.dataset))
 
     # load the model
     if torch.cuda.is_available():
@@ -63,8 +67,23 @@ if __name__ == '__main__':
         num_workers=int(args.worker))
     
     with torch.set_grad_enabled(False):
-        test_result = test_model(mconfig,model,test_dataloader,device,8,0,0,None,None,True)
+        test_result = test_model(mconfig,model,test_dataloader,device,8,0,0,None,None,True, store_results=True if args.csv or args.json else False)
 
     print(f"Total test CER: {test_result.total_cer}")
+    if args.csv:
+        import csv
+        # open the csv
+        lines = []
+        for fname, gt in zip(reader.list_files(),test_result.results):
+            with open(args.csv, "w", newline='') as of:
+                writer = csv.writer(of,delimiter=";", doublequote=True)
+                writer.writerow((fname,gt))
+
+    if args.json:
+        import json
+        lines = [ {"file": fname, "gt": gt, "pred": pred} for (fname,gt, pred) in zip(reader.list_files(),[reader.get_text(i) for i in range(len(reader))], test_result.results)]
+
+        with open(args.json,"w") as of:
+            json.dump(lines,of)
 
 

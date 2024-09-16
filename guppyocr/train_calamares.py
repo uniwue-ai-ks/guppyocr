@@ -193,11 +193,12 @@ class TestModelResult(NamedTuple):
     mean_cer: float
     total_cer: float
     accuracy: float
+    results: Optional[List[str]] = None
 
 def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: torch.utils.data.DataLoader, 
                device, batch_size, epoch: int, num_batch: int,
                test_ignore_chars: Optional[Collection[str]]= None,
-               writer: Optional[SummaryWriter] = None, print_random_indices: bool = True) -> TestModelResult:
+               writer: Optional[SummaryWriter] = None, print_random_indices: bool = True, store_results: bool = False) -> TestModelResult:
     
     assert not torch.is_grad_enabled(), "For testing the model, autograd should be turned off"
     char2id, id2char = mc.mconfig.char2id, mc.mconfig.id2char
@@ -212,6 +213,7 @@ def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: 
     total_chars: int = 0
     errors: int = 0
     model = model.eval()
+    result_strings = []
 
     for i, data in tqdm.tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
         x = data[0]  # [batch_size, Channel, Height, Width]
@@ -236,6 +238,9 @@ def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: 
             decoded_tgt = decode_ctc(predict[batch_i], id2char)
             decoded_gt_eval = decoded_gt
             decoded_tgt_eval = decoded_tgt
+            if store_results:
+                result_strings.append(decoded_tgt)
+            
             for c in test_ignore_chars:
                 decoded_gt_eval = decoded_gt_eval.replace(c, '')
                 decoded_tgt_eval = decoded_tgt_eval.replace(c, '')
@@ -258,7 +263,7 @@ def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: 
                     writer.add_text(
                         f"Pred_{i}", decoded_tgt, epoch * num_batch)
     CER_arr = np.array(CER_SUM) 
-    return TestModelResult(float(np.mean(CER_arr)),float(errors / total_chars),float(np.count_nonzero(CER_arr == 0.0) / CER_arr.shape[0]))
+    return TestModelResult(float(np.mean(CER_arr)),float(errors / total_chars),float(np.count_nonzero(CER_arr == 0.0) / CER_arr.shape[0]),result_strings if store_results else None)
 
 
 
