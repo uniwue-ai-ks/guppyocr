@@ -41,7 +41,7 @@ class ModelConfiguration:
             return CalamariNetv2(mconfig.Channel,mconfig.Height, mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         elif mconfig.arch == "crnn":
             return CRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu,pre_lstm_dropout=mconfig.dropout, inter_lstm_dropout=mconfig.dropout)
-        elif mconfig.arch == "crnn":
+        elif mconfig.arch == "trcnn":
             return TrCNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu,pre_lstm_dropout=mconfig.dropout, inter_lstm_dropout=mconfig.dropout)
         elif mconfig.arch == "stncrnn":
             return STNCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
