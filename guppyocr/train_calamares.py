@@ -610,7 +610,7 @@ if __name__ == '__main__':
     parser.add_argument("--grad_clip", action="store_true",
                         help="Enable gradient clipping (default off)")
     parser.add_argument("--arch", type=str,
-                        choices=["crnn", "calamari", "stncrnn", "trcrnn"])
+                        choices=["crnn", "calamari", "stncrnn", "trcrnn", "trcnn"])
     parser.add_argument("--test_loaded_model", action="store_true")
     parser.add_argument("--detailed", action="store_true",
                         help="Enable detailed output mode")
