@@ -254,6 +254,85 @@ class CRNN(nn.Module):
         #print(output.size())
         return output, None, None, None
 
+
+class TrCNN(nn.Module):
+
+    def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False, pre_lstm_dropout: float = 0.0, inter_lstm_dropout: float = 0.0):
+        super(CRNN, self).__init__()
+
+        self.channel = Channel
+        self.feature_height = feature_height
+        self.feature_width = feature_width
+        self.output_classes = output_classes
+        self.seq_len = seq_len
+        #self.dropout = dropout
+
+        #assert opt['imgH'] % 16 == 0, 'imgH has to be a multiple of 16'
+        assert self.feature_height % 16 == 0
+
+
+        ks = [3, 3, 3, 3, 3, 3, 2]
+        ps = [1, 1, 1, 1, 1, 1, 0]
+        ss = [1, 1, 1, 1, 1, 1, 1]
+        nm = [64, 128, 256, 256, 512, 512, 512]
+
+        cnn = nn.Sequential()
+
+        def convRelu(i, batchNormalization=False):
+            nIn = self.channel if i == 0 else nm[i - 1]
+            nOut = nm[i]
+            cnn.add_module('conv{0}'.format(i),
+                           nn.Conv2d(nIn, nOut, ks[i], ss[i], ps[i]))
+            if batchNormalization:
+                cnn.add_module('batchnorm{0}'.format(i), nn.BatchNorm2d(nOut))
+            if leakyRelu:
+                cnn.add_module('relu{0}'.format(i),
+                               nn.LeakyReLU(0.2, inplace=True))
+            else:
+                cnn.add_module('relu{0}'.format(i), nn.ReLU(True))
+
+        convRelu(0)
+        cnn.add_module('pooling{0}'.format(0), nn.MaxPool2d(2, 2))  # 64x16x64
+        convRelu(1)
+        cnn.add_module('pooling{0}'.format(1), nn.MaxPool2d(2, 2))  # 128x8x32
+        convRelu(2, True)
+        convRelu(3)
+        cnn.add_module('pooling{0}'.format(2),
+                       nn.MaxPool2d((2, 2), (2, 1), (0, 1)))  # 256x4x16
+        convRelu(4, True)
+        convRelu(5)
+        cnn.add_module('pooling{0}'.format(3),
+                       nn.MaxPool2d((4, 2), (2, 1), (0, 1)))  # 512x2x16
+
+        convRelu(6, True)  # 512x1x16
+        if pre_lstm_dropout > 0:
+            cnn.add_module('dropout0', nn.Dropout(pre_lstm_dropout))
+        self.cnn = cnn
+        # Transformer-based decoder
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=512, nhead=8, dim_feedforward=hidden_units, dropout=inter_lstm_dropout)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=layers)
+
+        self.fc = nn.Linear(512, output_classes)  # Final output layer for classification
+
+    def forward(self, input, _):
+        # CNN feature extraction
+        conv = self.cnn(input)
+        b, c, h, w = conv.size()
+        assert h == 1, f"the height of conv must be 1, is: {h}"
+        conv = conv.squeeze(2)  # Remove the height dimension (since h == 1)
+        conv = conv.permute(2, 0, 1)  # [w, b, c] -> sequence length first
+
+        # Transformer-based sequence modeling
+        transformer_output = self.transformer_encoder(conv)
+
+        # Final classification layer
+        output = self.fc(transformer_output)
+
+        output = output.permute(1, 0, 2)  # [seq_len, batch, classes] -> [batch, seq_len, classes]
+        return output, None, None, None
+
+
 class SpatialTransformer(nn.Module):
     def __init__(self):
         super(SpatialTransformer, self).__init__()

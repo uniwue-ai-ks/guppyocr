@@ -259,7 +259,7 @@ def build_training_ds_n(line_table: List[GTLine], out_dir: str):
     
     counts = [500, 1000, 2000, 4000, 100000]
     for count in counts:
-        ds_latin = sorted(latin[:count],key=lambda x: x.xml_file)
+        ds_latin = sorted(latin[:count], key=lambda x: x.xml_file)
         ds_mixed = sorted(mixed[:count], key=lambda x: x.xml_file)
         
         out_dir = Path(out_dir)
