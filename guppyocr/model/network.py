@@ -258,7 +258,7 @@ class CRNN(nn.Module):
 class TrCNN(nn.Module):
 
     def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False, pre_lstm_dropout: float = 0.0, inter_lstm_dropout: float = 0.0):
-        super(CRNN, self).__init__()
+        super(TrCNN, self).__init__()
 
         self.channel = Channel
         self.feature_height = feature_height
