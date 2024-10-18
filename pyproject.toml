@@ -28,7 +28,8 @@ dependencies = [
     "opencv-python-headless",
     "libpagexml3 @ git+https://gitlab2.informatik.uni-wuerzburg.de/nof36hn/libpagexml3.git",
     "pyarrow~=12.0.1",
-    "pillow==9.5.0"
+    "pillow==9.5.0",
+    "albumentations"
 ]
 
 [tool.setuptools]
