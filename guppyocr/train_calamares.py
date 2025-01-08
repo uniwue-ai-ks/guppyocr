@@ -110,6 +110,7 @@ class TrainingOpts:
 
     def get_hyperparameters(self) -> dict:
         hparams_dict = asdict(self)
+        hparams_dict["add_chars"] = "".join(sorted(hparams_dict["add_chars"]))
         hparams_dict["test_ignore_chars"] = "".join(sorted(hparams_dict["test_ignore_chars"]))
         return hparams_dict
 
