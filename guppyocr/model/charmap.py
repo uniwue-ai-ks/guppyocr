@@ -30,8 +30,12 @@ def save_charmap(out_path: Path, cmap: CharMap):
     with open(out_path, "w") as f:
         f.write((json.dumps(json_content)))
 
-def make_charmap_from_readers(readers: List[IDatasetReader], use_tqdm=False) -> Tuple[CharMap, int]:
-    all_chars = set()
+def make_charmap_from_readers(readers: List[IDatasetReader], use_tqdm=False, add_chars: list = None) -> Tuple[CharMap, int]:
+    if add_chars:
+        all_chars = set(add_chars)
+    else:
+        all_chars = set()
+    
     max_seq_len = 0
     for reader in readers:
         if use_tqdm:

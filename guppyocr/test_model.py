@@ -4,6 +4,7 @@ import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0" # set GPU id at the very begining
 import argparse
 from pathlib import Path
+from typing import Optional
 import torch
 import torch.nn.parallel
 import torch.utils.data
@@ -20,24 +21,10 @@ from guppyocr.ocr_dataset import IDatasetReader, PlainDatasetReader, SplitDatase
 
 from guppyocr.train_calamares import test_model
 
-if __name__ == '__main__':
-    os.nice(10)
-    freeze_support()
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='',
-                        help='model path')
-    parser.add_argument('--reader', type=str, default='plain',
-                        help="Reader Module to use for reading the dataset")
-    parser.add_argument('--dataset', type=str,
-                        required=True, help="dataset path")
-    parser.add_argument("--worker", type=int, default=4, help="Number of data loader workers")
-    parser.add_argument("--csv", type=str, required=False)
-    parser.add_argument("--json", type=str, required=False)
 
-    
-    args = parser.parse_args()
-    reader: PlainDatasetReader = make_dataset_reader(Path(args.dataset))
+def test_model_raw(model_path: Path, dataset_path: Path, reader: str, csv: Optional[Path], json: Optional[Path]):
+    reader: PlainDatasetReader = make_dataset_reader(Path(dataset_path))
 
     # load the model
     if torch.cuda.is_available():
@@ -47,7 +34,7 @@ if __name__ == '__main__':
         device = torch.device("cpu")
         print("CPU being used!")
 
-    mconfig, model = ModelConfiguration.load_model(args.model, device)
+    mconfig, model = ModelConfiguration.load_model(model_path, device)
 
     # check if the VOC of the 
     cmap, _ = make_charmap_from_readers([reader],False)
@@ -64,26 +51,45 @@ if __name__ == '__main__':
         test_dataset,
         batch_size=8,
         shuffle=False,
-        num_workers=int(args.worker))
+        num_workers=4)
     
     with torch.set_grad_enabled(False):
         test_result = test_model(mconfig,model,test_dataloader,device,8,0,0,None,None,True, store_results=True if args.csv or args.json else False)
 
     print(f"Total test CER: {test_result.total_cer}")
-    if args.csv:
+    if csv:
         import csv
         # open the csv
         lines = []
         for fname, gt in zip(reader.list_files(),test_result.results):
-            with open(args.csv, "w", newline='') as of:
+            with open(csv, "w", newline='') as of:
                 writer = csv.writer(of,delimiter=";", doublequote=True)
                 writer.writerow((fname,gt))
 
-    if args.json:
+    if json:
         import json
         lines = [ {"file": fname, "gt": gt, "pred": pred} for (fname,gt, pred) in zip(reader.list_files(),[reader.get_text(i) for i in range(len(reader))], test_result.results)]
 
-        with open(args.json,"w") as of:
+        with open(json,"w") as of:
             json.dump(lines,of)
 
+if __name__ == '__main__':
+    os.nice(10)
+    freeze_support()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str, default='',
+                        help='model path')
+    parser.add_argument('--reader', type=str, default='plain',
+                        help="Reader Module to use for reading the dataset")
+    parser.add_argument('--dataset', type=str,
+                        required=True, help="dataset path")
+    #parser.add_argument("--worker", type=int, default=4, help="Number of data loader workers")
+    parser.add_argument("--csv", type=str, required=False)
+    parser.add_argument("--json", type=str, required=False)
+
+    
+    args = parser.parse_args()
+    test_model_raw(model_path=Path(args.model), dataset_path=Path(args.dataset), reader=args.reader,csv=args.csv,json=args.json)
+   
 

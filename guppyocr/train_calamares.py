@@ -105,6 +105,7 @@ class TrainingOpts:
     fold: int = 0
 
     l2_regularizer: Optional[float] = None
+    add_chars: List[str] = field(default_factory=lambda: list("1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ[]().,?!\""))
 
 
     def get_hyperparameters(self) -> dict:
@@ -298,7 +299,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 
     # build the vocabulary
     
-    cmap_train, cmap_sl_train = make_charmap_from_readers([reader_train], use_tqdm=True)
+    cmap_train, cmap_sl_train = make_charmap_from_readers([reader_train], use_tqdm=True,add_chars=opt.add_chars)
     cmap_test, cmap_sl_test  = make_charmap_from_readers([reader_val], use_tqdm=True)
 
     if not set(cmap_train.charmap).issuperset(set(cmap_test.charmap)):
@@ -647,6 +648,7 @@ if __name__ == '__main__':
     parser.add_argument("--crossfold", type=int, default=0, help="Number of folds")
     parser.add_argument("--fold", type=int, default=0, help="Current fold")
     parser.add_argument("--l2_regularizer", type=float, default=0, help="Set L2 regularization (weight decay)")
+    parser.add_argument("--test_path", type=str, default=None)
 
     import sys
     print(sys.argv)
@@ -682,3 +684,10 @@ if __name__ == '__main__':
         l2_regularizer=args.l2_regularizer
     )
     train_model(training_opts)
+
+    if args.test_path is not None:
+        print("Testing model using test_model.py script")
+        from guppyocr.test_model import test_model_raw
+        test_model_raw(Path(args.output) / "model_best.pth",Path(args.test_path),"plain",Path(args.output)/ "test_results.csv")
+
+        

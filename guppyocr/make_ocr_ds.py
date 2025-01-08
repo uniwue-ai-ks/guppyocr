@@ -120,7 +120,7 @@ def extract_pagexml(pxml: PageXMLPage, xml_path: Path, poly_extraction_settings:
     companion_image_arr = np.array(companion_image)
 
     for tl in pxml.text_lines():
-        if not inference and not poly_extraction_settings.text_id in tl.text_equivs and not poly_extraction_settings.fallback_text_id in tl.text_equivs:
+        if not inference and poly_extraction_settings.text_id not in tl.text_equivs and poly_extraction_settings.fallback_text_id not in tl.text_equivs:
             continue
         parent_region = pxml.region_by_id(tl.parent_region_id)
         if parent_region.region_type in filter.region_type_blacklist or \
@@ -190,7 +190,7 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
         fn = FilenameEnumerator(0,"")
         try:
             page = PageXMLParser.from_file(x,strictness=PageXMLParserMode.EASY).get_page()
-            for cutout in extract_pagexml(page,Path(x),settings, filter):
+            for cutout in extract_pagexml(pxml=page,xml_path=Path(x),poly_extraction_settings=settings, inference=False, filter=filter):
                 if  language_settings.disable_greek and "@" in cutout.gt_text:
                     continue
 
