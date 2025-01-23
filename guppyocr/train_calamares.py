@@ -415,7 +415,8 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 
     if opt.test_loaded_model and trained_model_path:
         print("Testing trained model")
-        test_model(mconfig, model, test_dataloader, device, batch_size,0,0,opt.test_ignore_chars,None,True)
+        with torch.set_grad_enabled(False):
+            test_model(mconfig, model, test_dataloader, device, batch_size,0,0,opt.test_ignore_chars,None,True)
 
     if opt.optimizer.lower() == "adabelief":
         optimizer = AdaBelief(model.parameters(),
@@ -693,5 +694,4 @@ if __name__ == '__main__':
                        dataset_path=Path(args.test_path),
                        reader="plain",
                        csv_path=Path(args.output) / "test_results.csv",
-                       json_path=Path(args.output) / "test_results.json")
-        
+                       json_path=Path(args.output) / "test_results.json")        
