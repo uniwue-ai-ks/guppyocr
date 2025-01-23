@@ -255,6 +255,61 @@ class CRNN(nn.Module):
         return output, None, None, None
 
 
+class TestCRNN(nn.Module):
+
+    def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False, pre_lstm_dropout: float = 0.0, inter_lstm_dropout: float = 0.0):
+        super(TestCRNN, self).__init__()
+
+        self.channel = Channel
+        self.feature_height = feature_height
+        self.feature_width = feature_width
+        self.output_classes = output_classes
+        self.seq_len = seq_len
+        #self.dropout = dropout
+
+        #assert opt['imgH'] % 16 == 0, 'imgH has to be a multiple of 16'
+        assert self.feature_height % 16 == 0
+
+
+        ks = [3, 3, 3, 3, 3, 3, 2]
+        ps = [1, 1, 1, 1, 1, 1, 0]
+        ss = [1, 1, 1, 1, 1, 1, 1]
+        nm = [64, 128, 256, 256, 512, 512, 512]
+
+        cnn = nn.Sequential()
+
+        cnn.add_module('conv1}',
+                           nn.Conv2d(3, 512, (48,1), 1, 0))
+        cnn.add_module('relu1',
+                        nn.LeakyReLU(0.2, inplace=True))
+        if pre_lstm_dropout > 0:
+            cnn.add_module('dropout0', nn.Dropout(pre_lstm_dropout))
+        self.cnn = cnn
+        self.rnn = nn.Sequential(
+            BidirectionalLSTM(512, 128, 128),
+            nn.Dropout(inter_lstm_dropout) if inter_lstm_dropout > 0 else nn.Identity(),
+            BidirectionalLSTM(128, 128, self.output_classes))
+        #print(self.cnn)
+
+
+    def forward(self, input, _):
+        # conv features
+
+        conv = self.cnn(input)
+        b, c, h, w = conv.size()
+        #print(f"Conv Size: {b} {c} {h} {w}")
+        assert h == 1, f"the height of conv must be 1, is: {h}"
+        conv = conv.squeeze(2)
+        #print(conv.size())
+        conv = conv.permute(2, 0, 1)  # [w, b, c]
+        #print(conv.size())
+        # rnn features
+        output = self.rnn(conv)
+        #print(output.size())
+        output = output.transpose(1,0) #Tbh to bth
+        #print(output.size())
+        return output, None, None, None
+
 class TrCNN(nn.Module):
 
     def __init__(self, Channel, feature_height, feature_width, embedding_dim, output_classes, hidden_units, layers, keep_prob, seq_len, device, leakyRelu=False, pre_lstm_dropout: float = 0.0, inter_lstm_dropout: float = 0.0):

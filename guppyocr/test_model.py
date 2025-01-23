@@ -23,7 +23,7 @@ from guppyocr.train_calamares import test_model
 
 
 
-def test_model_raw(model_path: Path, dataset_path: Path, reader: str, csv: Optional[Path], json: Optional[Path]):
+def test_model_raw(model_path: Path, dataset_path: Path, reader: str, csv_path: Optional[Path] = None, json_path: Optional[Path] = None):
     reader: PlainDatasetReader = make_dataset_reader(Path(dataset_path))
 
     # load the model
@@ -90,6 +90,6 @@ if __name__ == '__main__':
 
     
     args = parser.parse_args()
-    test_model_raw(model_path=Path(args.model), dataset_path=Path(args.dataset), reader=args.reader,csv=args.csv,json=args.json)
+    test_model_raw(model_path=Path(args.model), dataset_path=Path(args.dataset), reader=args.reader,csv_path=Path(args.csv) if args.csv else None,json_path=Path(args.json) if args.json else None)
    
 

@@ -612,7 +612,7 @@ if __name__ == '__main__':
     parser.add_argument("--grad_clip", action="store_true",
                         help="Enable gradient clipping (default off)")
     parser.add_argument("--arch", type=str,
-                        choices=["crnn", "calamari", "stncrnn", "trcrnn", "trcnn"])
+                        choices=ModelConfiguration.valid_model_names())
     parser.add_argument("--test_loaded_model", action="store_true")
     parser.add_argument("--detailed", action="store_true",
                         help="Enable detailed output mode")
@@ -689,6 +689,9 @@ if __name__ == '__main__':
     if args.test_path is not None:
         print("Testing model using test_model.py script")
         from guppyocr.test_model import test_model_raw
-        test_model_raw(Path(args.output) / "model_best.pth",Path(args.test_path),"plain",Path(args.output)/ "test_results.csv")
-
+        test_model_raw(model_path=Path(args.output) / "model_best.pth",
+                       dataset_path=Path(args.test_path),
+                       reader="plain",
+                       csv_path=Path(args.output) / "test_results.csv",
+                       json_path=Path(args.output) / "test_results.json")
         

@@ -1,4 +1,4 @@
-from guppyocr.model.network import CalamariNetv2, CRNN, CRNNTiny, STNCRNN, TrCNN, TrCRNN
+from guppyocr.model.network import CalamariNetv2, CRNN, CRNNTiny, STNCRNN, TestCRNN, TrCNN, TrCRNN
 from dataclasses import dataclass
 import dataclasses
 from typing import Union, Dict, Optional
@@ -24,7 +24,12 @@ class ModelParameters:
     id2char: dict
     leaky_relu: bool = False
     dropout: float = 0.3
+
+
 class ModelConfiguration:
+    @staticmethod
+    def valid_model_names() -> List[str]:
+        return ["calamari", "crnn", "testcrnn","trcnn","stncrnn","trcrnn"]
     def __init__(self, mconfig: ModelParameters):
         self.mconfig = mconfig
 
@@ -41,6 +46,8 @@ class ModelConfiguration:
             return CalamariNetv2(mconfig.Channel,mconfig.Height, mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         elif mconfig.arch == "crnn":
             return CRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu,pre_lstm_dropout=mconfig.dropout, inter_lstm_dropout=mconfig.dropout)
+        elif mconfig.arch == "testcrnn":
+            return TestCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu,pre_lstm_dropout=mconfig.dropout, inter_lstm_dropout=mconfig.dropout)
         elif mconfig.arch == "trcnn":
             return TrCNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu,pre_lstm_dropout=mconfig.dropout, inter_lstm_dropout=mconfig.dropout)
         elif mconfig.arch == "stncrnn":
