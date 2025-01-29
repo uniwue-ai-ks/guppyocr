@@ -57,20 +57,20 @@ def test_model_raw(model_path: Path, dataset_path: Path, reader: str, csv_path: 
         test_result = test_model(mconfig,model,test_dataloader,device,8,0,0,None,None,True, store_results=True if args.csv or args.json else False)
 
     print(f"Total test CER: {test_result.total_cer}")
-    if csv:
+    if csv_path:
         import csv
         # open the csv
         lines = []
         for fname, gt in zip(reader.list_files(),test_result.results):
-            with open(csv, "w", newline='') as of:
+            with open(csv_path, "w", newline='') as of:
                 writer = csv.writer(of,delimiter=";", doublequote=True)
                 writer.writerow((fname,gt))
 
-    if json:
+    if json_path:
         import json
         lines = [ {"file": fname, "gt": gt, "pred": pred} for (fname,gt, pred) in zip(reader.list_files(),[reader.get_text(i) for i in range(len(reader))], test_result.results)]
 
-        with open(json,"w") as of:
+        with open(json_path,"w") as of:
             json.dump(lines,of)
 
 if __name__ == '__main__':
@@ -87,6 +87,7 @@ if __name__ == '__main__':
     #parser.add_argument("--worker", type=int, default=4, help="Number of data loader workers")
     parser.add_argument("--csv", type=str, required=False)
     parser.add_argument("--json", type=str, required=False)
+    parser.add_argument("")
 
     
     args = parser.parse_args()
