@@ -1,4 +1,5 @@
 import itertools
+import multiprocessing
 import random
 import sys
 from pathlib import Path
@@ -17,10 +18,11 @@ from trdg.string_generator import create_strings_from_dict
 
 
 # The generators use the same arguments as the CLI, only as parameters
-def wordlist():
-    with open("/home/norbert/uni/page-segment/sar-pytorch/wordlist") as f:
+def wordlist(path: str):
+    with open(path) as f:
         lines = [x for x in f.readlines()]
     return lines
+
 
 def numbers_gen():
     if random.random() > 0.5:
@@ -133,79 +135,145 @@ RandomNumberGen = Sequential([
             (1, lambda x: x + "," + str(random.randint(1,9999))),
             (1, lambda x: x + "." + str(random.randint(1,9999))),
             (1, lambda x: x),
+            (1, lambda x: x + f",{random.randint(1,99):02d}"),
+            (1, lambda x: x + f".{random.randint(1,99):02d}")
         ])
     ])
 
-def main():
-    words = wordlist()
+from abc import ABC, abstractmethod
 
+OUTPUT_DIR="/tmp/german_train2"
+
+def mp_generate(arg):
+    text, font, i = arg
+    leftm, rightm = random.randint(3,22), random.randint(3,22)
+    gen = GeneratorFromStrings(
+        [text],
+        size=random.choice([28,32,38,42,48]),
+        blur=OneOf([
+            (1,lambda x: 0),
+            (1, lambda x: 0),
+            ])(None),
+        #size=48,
+        skewing_angle=OneOf([
+            (1, lambda x: 1),
+            (1, lambda x: 2),
+            (1, lambda x: 0)
+            ])(None),
+        random_skew=True,
+        fonts=[font],
+        background_type=random.randint(0,3),
+        margins=OneOf([ # Top, left, bottom, right
+            (1, lambda x: (5, leftm, 5, rightm)),
+            (1, lambda x: (3, leftm, 3, rightm)),
+            (1, lambda x: (3, leftm, 3, rightm)),
+            (1, lambda x: (1, rightm, 1, rightm)),
+        ])(None),
+        image_dir="/home/norbert/uni/page-segment/guppyocr/guppyocr/backgrounds",
+        text_color=random.choice([
+            "#000000",
+            "#282828",
+            "#A0A0A0",
+            "#182018",
+            "#101010",
+            "#050505",
+            "#051012",
+            "#100802",
+            "#323718",
+            "#320815",
+            "#184718",
+            "#182549"
+        ])
+    )
+    try:
+        img, _ = gen.next()
+        if img == None:
+            raise RuntimeError("no image was generated")
+        fname = Path(OUTPUT_DIR)/ f"{i:07}.png"
+        gt_path = fname.with_suffix(".gt.txt")
+        with open(gt_path,"w") as f:
+            f.write(text)
+
+        img: PIL.Image.Image = img
+        img.save(fname,compression=1)
+    except Exception as e:
+        print(f"Error genrating with font: {Path(font).name}")
+        print(e)
+    
+def main():
+    Path(OUTPUT_DIR).mkdir(exist_ok=False)
+
+    words = wordlist("/home/norbert/uni/page-segment/sar-pytorch/wordlist")
+    german_words = wordlist("/home/norbert/uni/page-segment/sar-pytorch/german_wordlist.txt")
 
     RandomStringGenerator = \
     Sequential([
         lambda x: [],
-        Repeat(1,5, OneOf([
+        Repeat(2,5, OneOf([
             (1, lambda x: x + [RandomNumberGen([])]),
             (1, lambda x: x + [random.choice(words)]),
+            (1, lambda x: x + [random.choice(german_words)]),
             (0.2, lambda x: x + ["-"]),
             (0.2, lambda x: x + [","])
         ])),
         lambda x: [y.replace("\n","") for y in x],
         lambda x: " ".join(x),
         lambda x: x.replace(" - ",""),
+        lambda x: x.replace(" -",""),
         lambda x: x.replace(" ,", ","),
+        lambda x: x.replace(" .", "."),
+        lambda x: x.replace(" !", "!"),
+        lambda x: x.replace(" ?", "?"),
     ])
+
+    RandomWordGenerator = \
+        OneOf([
+            (1, lambda x: random.choice(german_words)),
+            (1, lambda x: RandomNumberGen("")),
+            (1, lambda x: f"{random.choice(german_words).strip()}-{random.choice(german_words).strip()}"),
+            (1, lambda x: random.choice(words))
+        ])
 
     random.seed(123456)
     data_strings = []
-    for i in tqdm(range(1000000)):
-        data_strings.append(RandomStringGenerator(None))
+    for i in tqdm(range(100000)):
+        #data_strings.append(RandomStringGenerator(None))
+        if random.random() < 0.5:
+            data_strings.append(RandomWordGenerator(None))
+        else:
+            data_strings.append(RandomStringGenerator([]))
 
 
-    fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/sar-pytorch/fonts/").iterdir()]
+    #fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/sar-pytorch/fonts/").iterdir()]
+    fonts=[str(x) for x in Path("/home/norbert/uni/page-segment/GoogleFonts/fontsv1/").iterdir()]
 
     random.shuffle(fonts)
     fonts_iter = itertools.cycle(fonts)
 
-
-    for i, text in tqdm(enumerate(data_strings), total=len(data_strings)):    # Do something with the pillow images here.
-        font = next(fonts_iter)
-        gen = GeneratorFromStrings(
-            [text],
-            blur=OneOf([
-                (1,lambda x: 0),
-                (1, lambda x: 0),
-                ])(None),
-            size=48,
-            skewing_angle=OneOf([
-                (1, lambda x: 1),
-                (1, lambda x: 0)
-                ])(None),
-            random_skew=True,
-            fonts=[font],
-            background_type=OneOf([(3,lambda x: 0),(1,lambda x: 2)])(None),
-            margins=OneOf([
-                (1, lambda x: (5, 5, 5, 5)),
-                (1, lambda x: (3, 3, 3, 3)),
-                (1, lambda x: (1, 1, 1, 1)),
-            ])(None),
-        )
-        try:
-            img, _ = gen.next()
-            if img == None:
-                continue
-            fname = Path("/tmp/googlefontsval/")/ f"{i:07}.png"
-            gt_path = Path(fname).with_suffix(".gt.txt")
-            with open(gt_path,"w") as f:
-                f.write(text)
-
-            img: PIL.Image.Image = img
-            img.save(fname,compression=1)
-            if i == len(data_strings):
-                break
-        except Exception as e:
-            print(f"Error genrating with font: {Path(font).name}")
-            print(e)
+    data = [x for x in zip(data_strings, fonts_iter, itertools.count())]
+    mp = multiprocessing.Pool()
+    for _ in tqdm(mp.imap(mp_generate,data), total=len(data)):
+        pass
+       
 
 
+def convert_to_doctr_json(dir: Path):
+    import shutil
+    def slurp(f: Path):
+        with open(f) as inp:
+            return inp.read().strip()
+    
+    images_dir = dir / "images"
+    images_dir.mkdir(exist_ok=True)
+    labels = {}
+    for f in dir.iterdir():
+        if f.suffix == ".png":
+            shutil.move(str(f),str(images_dir))
+            labels[f.name] = slurp(f.with_suffix(".txt"))
+    import json
+    with open(dir / "labels.json", "w") as json_f:
+        json.dump(labels,json_f)
+    
 if __name__ == "__main__":
+    #convert_to_doctr_json(Path("/home/norbert/uni/page-segment/Datensets/funsd/training_words"))
     main()

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Tuple
 
+from tqdm import tqdm
+
 from guppyocr.ocr_dataset import IDatasetReader
 
 
@@ -28,11 +30,19 @@ def save_charmap(out_path: Path, cmap: CharMap):
     with open(out_path, "w") as f:
         f.write((json.dumps(json_content)))
 
-def make_charmap_from_readers(readers: List[IDatasetReader]) -> Tuple[CharMap, int]:
-    all_chars = set()
+def make_charmap_from_readers(readers: List[IDatasetReader], use_tqdm=False, add_chars: list = None) -> Tuple[CharMap, int]:
+    if add_chars:
+        all_chars = set(add_chars)
+    else:
+        all_chars = set()
+    
     max_seq_len = 0
     for reader in readers:
-        for i in range(len(reader)):
+        if use_tqdm:
+            iterator = tqdm(range(len(reader)),desc="Building Charmap")
+        else:
+            iterator = range(len(reader))
+        for i in iterator:
             txt = reader.get_text(i).replace("\n","")
             if len(txt) > max_seq_len:
                 max_seq_len = len(txt)
@@ -45,6 +55,17 @@ def make_charmap_from_readers(readers: List[IDatasetReader]) -> Tuple[CharMap, i
     id2char = dict(zip(itertools.count(), charmap))
     char2id = dict(zip(charmap, itertools.count()))
     return CharMap(charmap,char2id=char2id,id2char=id2char), max_seq_len
+
+def merge_charmaps(charmaps: List[CharMap]) -> CharMap:
+    all_chars = set()
+    for cm in charmaps:
+        all_chars.update(cm.charmap)
+    all_chars = sorted(all_chars - {"PAD", "UNK", "END"})
+
+    charmap = ["PAD"] + all_chars + ["UNK", "END"]
+    id2char = dict(zip(itertools.count(), charmap))
+    char2id = dict(zip(charmap, itertools.count()))
+    return CharMap(charmap,char2id=char2id,id2char=id2char)
 
 def make_charmap_from_input_dirs(dirs: List[str]) -> CharMap:
     all_chars = set()

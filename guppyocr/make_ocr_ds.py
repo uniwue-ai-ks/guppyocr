@@ -4,6 +4,7 @@ import itertools
 from dataclasses import dataclass, field
 from math import ceil, floor
 from pathlib import Path
+import re
 from typing import Iterable, Set, Iterator, List
 
 import cv2
@@ -11,7 +12,7 @@ import cv2
 import numpy as np
 from docopt import docopt
 from libpagexml3.libpagexml3 import PageXMLPage, PageXMLParser, PageXMLParserMode, TextLine, PageXMLTextTypes, \
-    PageRegionTypes
+    PageRegionTypes, TextEquiv
 import PIL
 import PIL.Image
 import PIL.ImageDraw
@@ -26,12 +27,15 @@ Usage:
     make_ocr_ds [options] <output_path> <pagexmls>...
 
 Options:
-    --writer=WRITER     Output writer to use [default: plain]
-    --prefix=PREFIX     set image prefix [default: ]
-    --skip              Skip files if no Companion file is found
-    --no-greek          Skip lines containing greek characters (@)
-    --squash_ats        Squash At Characters into a single char
-    --glob              Glob Image Files instead of iterating
+    --writer=WRITER         Output writer to use [default: plain]
+    --prefix=PREFIX         set image prefix [default: ]
+    --skip                  Skip files if no Companion file is found
+    --no-greek              Skip lines containing greek characters (@)
+    --squash_ats            Squash At Characters into a single char
+    --glob                  Glob Image Files instead of iterating
+    --gt_id=ID              ID for TextEquivs
+    --gt_fallback=ID        Fallback GT ID
+    --filter_small_lines=N  Remove all GT Lines with Less than N chars (0 for disable) [default: 3]
 """
 
 class FilenameEnumerator:
@@ -55,14 +59,21 @@ class CompanionFileNotFound(Exception):
 class PolyExtractionSettings:
     mask_poly: bool = False
     use_companion_image: CompanionImageType = CompanionImageType.COLOR
-
     use_region_polys: bool = True
+    text_id: int = TextEquiv.TEXT_ID_GROUND_TRUTH
+    fallback_text_id: int = None
 
 @dataclass
 class CutoutSample:
     img: PIL.Image.Image
     gt_text: str
     tl: TextLine
+
+
+def get_textline_polygon_bb(poly: np.ndarray):
+    x_min, x_max = floor(np.amin(poly[:,0])), ceil(np.amax(poly[:,0]))
+    y_min, y_max = floor(np.amin(poly[:,1])), ceil(np.amax(poly[:,1]))
+    return x_min,y_min,x_max, y_max
 
 
 def extract_textline_image(img: np.ndarray, poly: np.ndarray, extraction_settings: PolyExtractionSettings) -> PIL.Image.Image:
@@ -90,24 +101,26 @@ class RegionFilter:
     region_type_blacklist: Set[PageRegionTypes] = field(default_factory=set)
     text_type_blacklist: Set[PageXMLTextTypes] = field(default_factory=set)
 
+def get_color_companion(xml_path: Path):
+    for cn in [xml_path.with_suffix(".png"), xml_path.with_suffix(".jpg"), xml_path.with_suffix(".jpeg"),xml_path.with_suffix(".png.ocr") ]:
+        if cn.exists():
+            companion_image = PIL.Image.open(cn)
+            companion_image = companion_image.convert("RGB")
+            return companion_image
+    else:
+        raise CompanionFileNotFound(f"Companion image for {xml_path} not found")
 
 def extract_pagexml(pxml: PageXMLPage, xml_path: Path, poly_extraction_settings: PolyExtractionSettings, inference: bool = False, filter: RegionFilter = RegionFilter()) -> Iterable[CutoutSample]:
     # load the companion image
     if poly_extraction_settings.use_companion_image == CompanionImageType.COLOR:
-        for cn in [xml_path.with_suffix(".png"), xml_path.with_suffix(".jpg"), xml_path.with_suffix(".jpeg"),xml_path.with_suffix(".png.ocr") ]:
-            if cn.exists():
-                companion_image = PIL.Image.open(cn)
-                companion_image = companion_image.convert("RGB")
-                break
-        else:
-            raise CompanionFileNotFound(f"Companion image for {xml_path} not found")
+        companion_image = get_color_companion(xml_path)
     else:
         companion_image = PIL.Image.open(xml_path.with_suffix(".png.ocr"))
 
     companion_image_arr = np.array(companion_image)
 
     for tl in pxml.text_lines():
-        if not inference and not tl.has_gt_text():
+        if not inference and poly_extraction_settings.text_id not in tl.text_equivs and poly_extraction_settings.fallback_text_id not in tl.text_equivs:
             continue
         parent_region = pxml.region_by_id(tl.parent_region_id)
         if parent_region.region_type in filter.region_type_blacklist or \
@@ -118,8 +131,12 @@ def extract_pagexml(pxml: PageXMLPage, xml_path: Path, poly_extraction_settings:
             poly = parent_region.polygon
         else:
             poly = tl.polygon
+        gt_txt = ""
+        if poly_extraction_settings.text_id in tl.text_equivs:
+            gt_txt = tl.text_equivs[poly_extraction_settings.text_id].text
+        elif poly_extraction_settings.fallback_text_id in tl.text_equivs:
+            gt_txt = tl.text_equivs[poly_extraction_settings.fallback_text_id].text
 
-        gt_txt = tl.get_text_gt()
         cut_image = extract_textline_image(companion_image_arr,poly,poly_extraction_settings)
         yield CutoutSample(cut_image,gt_txt, tl)
 
@@ -137,13 +154,23 @@ class LanguageSettings:
     disable_greek: bool = False
     cut_line_ending_mark: bool = True
     filter_small_lines: int = 0
+    gt_id:int = TextEquiv.TEXT_ID_GREEK_CORRECTION
+    gt_fallback: int = TextEquiv.TEXT_ID_GROUND_TRUTH
+    squash_ats: bool = False
+
+squash_ats_regex = re.compile("[@][@]+")
 
 def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: CompanionImageType, source_files_dirs: List[Path], glob_input: bool = False, language_settings: LanguageSettings = LanguageSettings(), ds_prefix: str = ''):
     settings = PolyExtractionSettings(
         mask_poly=False,
         use_companion_image=CompanionImageType.COLOR,
-        use_region_polys=False
+        use_region_polys=True, # Set this to true
+        text_id=language_settings.gt_id,
+        fallback_text_id=language_settings.gt_fallback
     )
+    filter = RegionFilter(
+        region_type_blacklist={PageRegionTypes.IMAGE_REGION}, 
+        text_type_blacklist=set([PageXMLTextTypes.DROP_CAPITAL, PageXMLTextTypes.CAPITAL_WORD]))
     
     if glob_input:
         xml_files = list(itertools.chain.from_iterable([sorted(glob.glob(path)) for path in source_files_dirs]))
@@ -163,7 +190,7 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
         fn = FilenameEnumerator(0,"")
         try:
             page = PageXMLParser.from_file(x,strictness=PageXMLParserMode.EASY).get_page()
-            for cutout in extract_pagexml(page,Path(x),settings):
+            for cutout in extract_pagexml(pxml=page,xml_path=Path(x),poly_extraction_settings=settings, inference=False, filter=filter):
                 if  language_settings.disable_greek and "@" in cutout.gt_text:
                     continue
 
@@ -173,7 +200,9 @@ def make_dataset(dataset_writer: IDatasetWriter, companion_image_type: Companion
                     lbpos = cutout.gt_text.find("↵")
                     if lbpos != -1:
                         cutout.gt_text = cutout.gt_text[:lbpos]
-        
+                if language_settings.squash_ats:
+                    cutout.gt_text = re.sub(squash_ats_regex,"@",cutout.gt_text)
+                
                 try:
                     dataset_writer.write(str(fn.next(prefix)), cutout.img , cutout.gt_text)
                 except FileExistsError as e:
@@ -194,11 +223,16 @@ def main(args):
         args["<pagexmls>"],args["--glob"],
         LanguageSettings(disable_greek=args["--no-greek"],
                          cut_line_ending_mark=True,
-                         filter_small_lines=3
-                         )
+                         filter_small_lines=int(args["--filter_small_lines"]),
+                         squash_ats=args["--squash_ats"],
+                         gt_id=int(args["--gt_id"]) if args["--gt_id"] is not None else TextEquiv.TEXT_ID_GROUND_TRUTH,
+                         gt_fallback=int(args["--gt_fallback"]) if args["--gt_fallback"] is not None else None # may be None
+                         ),
+        ds_prefix=args["--prefix"]
         )
 
 
 if __name__ == "__main__":
     args = docopt(USAGE)
+    #print(args)
     main(args)

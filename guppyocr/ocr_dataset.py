@@ -1,5 +1,7 @@
+from csv import reader
 import io
 from abc import ABC, abstractmethod
+from math import floor
 from pathlib import Path
 from typing import Iterable, List, Tuple, Union
 
@@ -7,6 +9,10 @@ import numpy as np
 import PIL
 import PIL.Image
 import cv2
+import random
+from tqdm import tqdm
+
+
 
 
 class IDatasetReader(ABC):
@@ -42,12 +48,16 @@ class IDatasetWriter(ABC):
 
 
 class PlainDatasetReader(IDatasetReader):
-    def __init__(self, root_dir: Path):
+    def __init__(self, root_dir: Path, load_text_when_building: bool = True):
         self.root_dir = root_dir
         self.files = []
         for f in self.root_dir.iterdir():
             if f.suffix == ".txt":
                 self.files.append(f.name)
+        self.texts = dict()
+        if load_text_when_building:
+            for i in tqdm(range(len(self)), desc="Buffering texts"):
+                self.texts[i] = self.get_text(i)
 
     def list_files(self) -> List[str]:
         return self.files
@@ -58,6 +68,9 @@ class PlainDatasetReader(IDatasetReader):
         return img
 
     def get_text(self, idx: int) -> str:
+        if idx in self.texts:
+            return self.texts[idx]
+        
         with open((self.root_dir / self.files[idx])) as f:
             return f.read()
     
@@ -203,6 +216,40 @@ class MemoryDatasetRW(IDatasetReader, IDatasetWriter):
     
     def close(self):
         pass
+
+class SplitDatasetAdaptor(IDatasetReader):
+    @staticmethod
+    def split_reader(reader: IDatasetReader, ratio: float, seed: int = 123456) -> Tuple[IDatasetReader, IDatasetReader]:
+        indices = [k for k,v in enumerate(reader.list_files())]
+        rng = random.Random(seed)
+        rng.shuffle(indices)
+        split_idx = floor(len(indices) * ratio)
+        train, test = indices[:split_idx], indices[split_idx:]
+        if not train or not test:
+            raise RuntimeError("Dataset too small to split")
+        print(f"Splitted Dataset: {len(train)} train, {len(test)} test samples")
+        return SplitDatasetAdaptor(reader, train), SplitDatasetAdaptor(reader, test)
+
+    def __init__(self, reader: IDatasetReader, indices: list):
+        self.reader= reader
+        self.indices = indices
+
+    def list_files(self) -> Iterable[str]:
+        files = self.reader.list_files()
+        return [files[i] for i in self.indices]
+    
+
+    def get_image(self, idx: int) -> np.ndarray:
+        return self.reader.get_image(self.indices[idx])
+
+    def get_text(self, idx: int) -> str:
+        return self.reader.get_text(self.indices[idx])
+
+    def get(self, idx: int) -> Tuple[np.ndarray, str]:
+        return self.get_image(idx), self.get_text(idx)
+
+    def __len__(self) -> int:
+        return len(self.indices)
 
 if __name__=="__main__":
     from tqdm import tqdm
