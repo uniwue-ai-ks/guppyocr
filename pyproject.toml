@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "guppyocr"
 description = "Simple and Fast OCR Engine (CRNN-based)"
 readme = "README.md"
-version = "0.1.0"
+version = "0.2.0"
 keywords = ["layout", "pagesegmentation"]
 
 license = {text = "BSD 3-Clause License"}
