@@ -87,7 +87,6 @@ if __name__ == '__main__':
     #parser.add_argument("--worker", type=int, default=4, help="Number of data loader workers")
     parser.add_argument("--csv", type=str, required=False)
     parser.add_argument("--json", type=str, required=False)
-    parser.add_argument("")
 
     
     args = parser.parse_args()
