@@ -87,7 +87,7 @@ class TrainingOpts:
     lr: float = 0.001
     grad_clip: bool = True
     batch_size: int = 8
-    test_ignore_chars: List[str] = field(default_factory=lambda: ['@', ' '])
+    test_ignore_chars: List[str] = field(default_factory=lambda: [])
     augment: bool = False
     detailed_results: bool = False
 
@@ -246,6 +246,7 @@ def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: 
             for c in test_ignore_chars:
                 decoded_gt_eval = decoded_gt_eval.replace(c, '')
                 decoded_tgt_eval = decoded_tgt_eval.replace(c, '')
+            # TODO: should spaces at the beginning / end should also by default be ignored (ie. stripping the output here?)
             edit_distance = editdistance.distance(
                 decoded_tgt_eval, decoded_gt_eval)
             
@@ -389,6 +390,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 
     if opt.crossfold > 0:
         train_dataset, test_dataset = make_crossfold(train_dataset,test_dataset,opt)
+        train_dataset.output_classes = train_dataset.dataset.output_classes
     
     # make dataloader
     train_dataloader = torch.utils.data.DataLoader(
@@ -540,12 +542,13 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                                 epoch * num_batch + i)
             writer.add_scalar('CER/val total', val_result.total_cer,
                                 epoch * num_batch + i)
+            writer.add_scalar("Line Accuracy", val_result.accuracy)
 
             #print(f"Epoch {epoch} average CER: {val_result.mean_cer :.5f}") # This is absolutely misleading and not required
-            print(f"Epoch {epoch} total CER: {val_result.total_cer :.5f}")
+            print(f"Epoch {epoch} total CER: {val_result.total_cer :.5f} / Line Accuracy: {val_result.accuracy :.5f}")
 
             with open(os.path.join(output_path, 'statistics.csv'), 'a') as f:
-                f.write(f"{epoch}, {val_result.mean_cer}, {val_result.total_cer}, {best_total_cer}\n")
+                f.write(f"{epoch}, {val_result.mean_cer}, {val_result.total_cer}, {best_total_cer}, {val_result.accuracy}\n")
                 #f.write("TEST CER Epoch {} {}\n".format(
                 #    epoch, )))
                 #f.write("Epoch {} total CER: {:.5f}\n".format(
