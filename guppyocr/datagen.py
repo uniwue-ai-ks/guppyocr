@@ -3,6 +3,7 @@ import multiprocessing
 import random
 import sys
 from pathlib import Path
+from tkinter import SE
 from typing import List, Tuple
 import PIL.Image
 from tqdm import tqdm
@@ -140,6 +141,13 @@ RandomNumberGen = Sequential([
         ])
     ])
 
+RandomNumberGenGerm = Sequential([
+    Re
+])
+def RandomFussnoteGen():
+    OneOf([
+        (1, lambda x: str(random.randint(0,39))+") " + random.cho)
+    ])
 from abc import ABC, abstractmethod
 
 OUTPUT_DIR="/tmp/german_train2"
@@ -199,7 +207,8 @@ def mp_generate(arg):
     except Exception as e:
         print(f"Error genrating with font: {Path(font).name}")
         print(e)
-    
+
+
 def main():
     Path(OUTPUT_DIR).mkdir(exist_ok=False)
 
@@ -207,24 +216,30 @@ def main():
     german_words = wordlist("/home/norbert/uni/page-segment/sar-pytorch/german_wordlist.txt")
 
     RandomStringGenerator = \
-    Sequential([
-        lambda x: [],
-        Repeat(2,5, OneOf([
-            (1, lambda x: x + [RandomNumberGen([])]),
-            (1, lambda x: x + [random.choice(words)]),
-            (1, lambda x: x + [random.choice(german_words)]),
-            (0.2, lambda x: x + ["-"]),
-            (0.2, lambda x: x + [","])
+    OneOf([
+        (20, Sequential([
+            lambda x: [],
+            Repeat(2,5, OneOf([
+                (1, lambda x: x + [RandomNumberGen([])]),
+                (1, lambda x: x + [random.choice(words)]),
+                (1, lambda x: x + [random.choice(german_words)]),
+                (0.2, lambda x: x + ["-"]),
+                (0.2, lambda x: x + [","])
+            ])),
+            lambda x: [y.replace("\n","") for y in x],
+            lambda x: " ".join(x),
+            lambda x: x.replace(" - ",""),
+            lambda x: x.replace(" -",""),
+            lambda x: x.replace(" ,", ","),
+            lambda x: x.replace(" .", "."),
+            lambda x: x.replace(" !", "!"),
+            lambda x: x.replace(" ?", "?"),
         ])),
-        lambda x: [y.replace("\n","") for y in x],
-        lambda x: " ".join(x),
-        lambda x: x.replace(" - ",""),
-        lambda x: x.replace(" -",""),
-        lambda x: x.replace(" ,", ","),
-        lambda x: x.replace(" .", "."),
-        lambda x: x.replace(" !", "!"),
-        lambda x: x.replace(" ?", "?"),
+        (1, OneOf([
+
+        ]))
     ])
+    
 
     RandomWordGenerator = \
         OneOf([

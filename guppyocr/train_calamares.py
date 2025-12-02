@@ -105,8 +105,8 @@ class TrainingOpts:
     fold: int = 0
 
     l2_regularizer: Optional[float] = None
-    add_chars: List[str] = field(default_factory=lambda: list("1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ[]().,?!\""))
-
+    #add_chars: List[str] = field(default_factory=lambda: list("1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ[]().,?!\""))
+    add_chars: List[str] = field(default_factory=list)
 
     def get_hyperparameters(self) -> dict:
         hparams_dict = asdict(self)
@@ -416,14 +416,15 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
     if opt.test_loaded_model and trained_model_path:
         print("Testing trained model")
         with torch.set_grad_enabled(False):
-            test_model(mconfig, model, test_dataloader, device, batch_size,0,0,opt.test_ignore_chars,None,True)
+            test_loaded_model_res = test_model(mconfig, model, test_dataloader, device, batch_size,0,0,opt.test_ignore_chars,None,True)
+            print(f"Loaded Model test CER: {test_loaded_model_res.total_cer :.4f}")
 
     if opt.optimizer.lower() == "adabelief":
         optimizer = AdaBelief(model.parameters(),
                               print_change_log=False, lr=opt.lr, weight_decay=opt.l2_regularizer if opt.l2_regularizer else 0)
     elif opt.optimizer.lower() == "adam":
         import torch.optim as optim
-        optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+        optimizer = optim.Adam(model.parameters(), lr=opt.lr,weight_decay=opt.l2_regularizer)
         assert not opt.l2_regularizer
     elif opt.optimizer.lower/() == "sgd":
         import torch.optim as optim
@@ -651,6 +652,7 @@ if __name__ == '__main__':
     parser.add_argument("--fold", type=int, default=0, help="Current fold")
     parser.add_argument("--l2_regularizer", type=float, default=0, help="Set L2 regularization (weight decay)")
     parser.add_argument("--test_path", type=str, default=None)
+    parser.add_argument("--seed", type=int, default=12345678, help="Seed for the dataset split")
 
     import sys
     print(sys.argv)
@@ -685,7 +687,7 @@ if __name__ == '__main__':
         fold=args.fold,
         l2_regularizer=args.l2_regularizer
     )
-    train_model(training_opts)
+    train_model(training_opts, seed=args.seed)
 
     if args.test_path is not None:
         print("Testing model using test_model.py script")

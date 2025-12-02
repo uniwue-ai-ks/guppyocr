@@ -6,6 +6,7 @@ from typing import BinaryIO, IO, Tuple, List
 import os
 import torch
 from torch import dropout, nn
+from guppyocr.model.network2 import ImprovedCRNN
 
 @dataclass
 class ModelParameters:
@@ -29,7 +30,7 @@ class ModelParameters:
 class ModelConfiguration:
     @staticmethod
     def valid_model_names() -> List[str]:
-        return ["calamari", "crnn", "testcrnn","trcnn","stncrnn","trcrnn"]
+        return ["calamari", "crnn", "testcrnn","trcnn","stncrnn","trcrnn", "improved"]
     def __init__(self, mconfig: ModelParameters):
         self.mconfig = mconfig
 
@@ -54,6 +55,22 @@ class ModelConfiguration:
             return STNCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         elif mconfig.arch == "trcrnn":
             return TrCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
+        elif mconfig.arch == "improved":
+            return ImprovedCRNN(
+                channel=3,  # or 3 for RGB
+                feature_height=mconfig.Height,  # must be divisible by 16
+                feature_width=mconfig.Width,
+                embedding_dim=512,
+                seq_len=mconfig.seq_len,
+                output_classes=len(mconfig.voc),  # number of characters
+                hidden_units=256,
+                rnn_layers=2,
+                pre_lstm_dropout=0.2,
+                inter_lstm_dropout=0.3,
+                use_gru=True  # or False for LSTM
+            )
+
+            return ImprovedCRNN(mconfig.Channel,mconfig.Height,mconfig.Width,mconfig.seq_len,len(mconfig.voc),mconfig.hidden_units,mconfig.layers,mconfig.keep_prob,mconfig.seq_len,device,mconfig.leaky_relu)
         else:
             raise KeyError(f"invalid model specified: {mconfig.arch}")
 
