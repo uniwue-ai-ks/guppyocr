@@ -390,6 +390,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
 
     if opt.crossfold > 0:
         train_dataset, test_dataset = make_crossfold(train_dataset,test_dataset,opt)
+        train_dataset.output_classes = train_dataset.dataset.output_classes
     
     # make dataloader
     train_dataloader = torch.utils.data.DataLoader(
