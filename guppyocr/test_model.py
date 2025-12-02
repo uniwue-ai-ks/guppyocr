@@ -57,6 +57,7 @@ def test_model_raw(model_path: Path, dataset_path: Path, reader: str, csv_path: 
         test_result = test_model(mconfig,model,test_dataloader,device,8,0,0,None,None,True, store_results=True if args.csv or args.json else False)
 
     print(f"Total test CER: {test_result.total_cer}")
+    print(f"Total test Line Accuracy: {test_result.accuracy}")
     if csv_path:
         import csv
         # open the csv
