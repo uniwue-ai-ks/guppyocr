@@ -1,10 +1,15 @@
 from pathlib import Path
 import shutil
 from tqdm import tqdm
+from argparse import ArgumentParser
 
-SOURCE_PATH="/home/norbert/uni/page-segment/greekocr/ByWriters2/Oporinus"
+#parse = ArgumentParser("Split Plain DS")
+#parse.add_argument("--input_dir",type=str,required=True)
 
-OUTPUT_DIR="/home/norbert/uni/page-segment/greekocr/ByWriters2/Split/Oporinus"
+#a#rgs 
+SOURCE_PATH="/tmp/guppym/diw-ocr-big"
+
+OUTPUT_DIR="/tmp/guppym"
 
 train_dir = Path(OUTPUT_DIR) / "train"
 test_dir = Path(OUTPUT_DIR) / "test"
