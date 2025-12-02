@@ -125,35 +125,35 @@ def make_readers(opt: TrainingOpts) -> Tuple[IDatasetReader, IDatasetReader]:
     if opt.reader == "plain":
         if opt.val_dataset:
             train_img_path = Path(opt.dataset)
-            test_img_path = Path(opt.val_dataset)
+            val_img_path = Path(opt.val_dataset)
             use_val_dataset = True
         else:
             train_img_path = Path(os.path.join(opt.dataset, 'train'))
-            test_img_path = Path(os.path.join(opt.dataset, 'test'))
+            val_img_path = Path(os.path.join(opt.dataset, 'test'))
             if not train_img_path.exists():
-                train_img_path = test_img_path = Path(opt.dataset)
+                train_img_path = val_img_path = Path(opt.dataset)
                 use_val_dataset = False
-            elif not test_img_path.exists():
-                test_img_path = train_img_path
+            elif not val_img_path.exists():
+                val_img_path = train_img_path
                 use_val_dataset = False
     elif opt.reader == "pq":
         train_img_path = Path(opt.dataset)
         if opt.val_dataset:
-            test_img_path = Path(opt.val_dataset)
+            val_img_path = Path(opt.val_dataset)
         else:
-            test_img_path = train_img_path
+            val_img_path = train_img_path
 
     # train_img_path = Path("/tmp/tmpout.pq")
     # test_img_path = Path("/tmp/tmpout.pq")
     print(f"Using traing dataset: {train_img_path}")
-    print(f"Using val dataset: {test_img_path}")
+    print(f"Using val dataset: {val_img_path}")
     reader_train = make_dataset_reader(train_img_path, opt.reader)
     if use_val_dataset and opt.split_val is not None:
         raise RuntimeError("Cannot specify --split_val and a validation dataset at the same time")
     elif opt.split_val is not None:
         reader_train, reader_val = SplitDatasetAdaptor.split_reader(reader_train,opt.split_val,seed=123456)
     else:
-        reader_val = make_dataset_reader(test_img_path, opt.reader)
+        reader_val = make_dataset_reader(val_img_path, opt.reader)
 
     return reader_train, reader_val
 
@@ -191,11 +191,17 @@ def make_crossfold(train_ds: data.Dataset, val_ds: data.Dataset, opts: TrainingO
     return new_train_ds, new_val_ds
 
 
+class ResultTuple(NamedTuple):
+    pred: str
+    gt: str
+    cer: float
+    correct: int
+
 class TestModelResult(NamedTuple):
     mean_cer: float
     total_cer: float
     accuracy: float
-    results: Optional[List[str]] = None
+    results: Optional[List[ResultTuple]] = None
 
 def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: torch.utils.data.DataLoader, 
                device, batch_size, epoch: int, num_batch: int,
@@ -240,8 +246,7 @@ def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: 
             decoded_tgt = decode_ctc(predict[batch_i], id2char)
             decoded_gt_eval = decoded_gt
             decoded_tgt_eval = decoded_tgt
-            if store_results:
-                result_strings.append(decoded_tgt)
+            
             
             for c in test_ignore_chars:
                 decoded_gt_eval = decoded_gt_eval.replace(c, '')
@@ -250,7 +255,11 @@ def test_model(mc: ModelConfiguration, model: torch.nn.Module, test_dataloader: 
             edit_distance = editdistance.distance(
                 decoded_tgt_eval, decoded_gt_eval)
             
+            
+
             CER = edit_distance / max(1, len(decoded_gt_eval))
+            if store_results:
+                result_strings.append(ResultTuple(decoded_tgt,decoded_gt,CER,CER == 0.0))
             total_chars += max(1, len(decoded_gt_eval))
             errors += edit_distance
             CER_SUM.append(CER)
@@ -428,10 +437,10 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
         import torch.optim as optim
         optimizer = optim.Adam(model.parameters(), lr=opt.lr,weight_decay=opt.l2_regularizer)
         assert not opt.l2_regularizer
-    elif opt.optimizer.lower/() == "sgd":
+    elif opt.optimizer.lower() == "sgd":
         import torch.optim as optim
-        optimizer = optim.SGD(model.parameters(), lr=opt.lr)
-        assert not opt.l2_regularizer
+        optimizer = optim.SGD(model.parameters(), lr=opt.lr,weight_decay=opt.l2_regularizer if opt.l2_regularizer else 0)
+        #assert not opt.l2_regularizer
     else:
         raise RuntimeError("Invalid optimizer specified")
 
@@ -500,11 +509,13 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
             target_lengths = target_firstpad
             # print("Inp Len: ", input_lengths)
             # print("Target Len: ", target_lengths)
+
+            # TODO: is mean or sum better here? it previously was "sum", but that tends to huge losses
             loss = nn.CTCLoss(blank=char2id["PAD"], reduction="sum", zero_infinity=True).forward(log_probs=predict_softmax,
                                                                                                  targets=target,
                                                                                                  input_lengths=input_lengths,
                                                                                                  target_lengths=target_lengths)
-            loss_avg.append(float(loss))
+            loss_avg.append(float(loss.detach()))
 
             loss.backward()
 
@@ -582,7 +593,7 @@ def train_model(opt: TrainingOpts, seed: int = None) -> TrainingResult:
                 os.makedirs(Path(output_path) / "mod_epochs", exist_ok=True)
                 save_model(Path(output_path) / "mod_epochs" / f"e_{epoch}.pth")
 
-            if epochs_without_improvement > opt.early_stopping:
+            if epochs_without_improvement >= opt.early_stopping:
                 break
 
     print("Best total CER is:", best_total_cer)

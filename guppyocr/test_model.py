@@ -19,7 +19,7 @@ from guppyocr.model.charmap import make_charmap_from_input_dirs, make_charmap_fr
 from guppyocr.model.model import ModelParameters, ModelConfiguration, adjust_voc_model
 from guppyocr.ocr_dataset import IDatasetReader, PlainDatasetReader, SplitDatasetAdaptor, make_dataset_reader
 
-from guppyocr.train_calamares import test_model
+from guppyocr.train_calamares import ResultTuple, test_model
 
 
 
@@ -54,18 +54,20 @@ def test_model_raw(model_path: Path, dataset_path: Path, reader: str, csv_path: 
         num_workers=4)
     
     with torch.set_grad_enabled(False):
-        test_result = test_model(mconfig,model,test_dataloader,device,8,0,0,None,None,True, store_results=True if args.csv or args.json else False)
+        test_result = test_model(mconfig,model,test_dataloader,device,8,0,0,None,None,True, store_results=True if args.csv is not None or args.json is not None else False)
 
     print(f"Total test CER: {test_result.total_cer}")
     print(f"Total test Line Accuracy: {test_result.accuracy}")
     if csv_path:
         import csv
         # open the csv
-        lines = []
-        for fname, gt in zip(reader.list_files(),test_result.results):
-            with open(csv_path, "w", newline='') as of:
-                writer = csv.writer(of,delimiter=";", doublequote=True)
-                writer.writerow((fname,gt))
+        with open(csv_path, "w", newline='') as of:
+            writer = csv.writer(of,delimiter=";", doublequote=True)
+            writer.writerow(("File", "GT", "Pred","CER", "Correct"))
+            for fname, gt in zip(reader.list_files(),test_result.results):
+                gt: ResultTuple = gt
+                writer.writerow((fname,gt.gt, gt.pred, gt.cer, gt.correct))
+
 
     if json_path:
         import json

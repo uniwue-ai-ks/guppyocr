@@ -3,7 +3,6 @@ import multiprocessing
 import random
 import sys
 from pathlib import Path
-from tkinter import SE
 from typing import List, Tuple
 import PIL.Image
 from tqdm import tqdm
@@ -141,9 +140,7 @@ RandomNumberGen = Sequential([
         ])
     ])
 
-RandomNumberGenGerm = Sequential([
-    Re
-])
+
 def RandomFussnoteGen():
     OneOf([
         (1, lambda x: str(random.randint(0,39))+") " + random.cho)
@@ -235,9 +232,6 @@ def main():
             lambda x: x.replace(" !", "!"),
             lambda x: x.replace(" ?", "?"),
         ])),
-        (1, OneOf([
-
-        ]))
     ])
     
 
