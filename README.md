@@ -6,12 +6,12 @@
 ## Installation
 
 ```
-pip install "guppyocr @ git+https://gitlab+deploy-token-113:pdXYgWy8yHMq5it7CxK6@gitlab2.informatik.uni-wuerzburg.de/nof36hn/guppyocr.git"
+pip install "guppyocr @ git+git@github.com:uniwue-ai-ks/guppyocr.git"
 ```
 or add
 
 ```
-guppyocr @ guppyocr @ git+https://gitlab+deploy-token-113:pdXYgWy8yHMq5it7CxK6@gitlab2.informatik.uni-wuerzburg.de/nof36hn/guppyocr.git
+guppyocr @ guppyocr @ git+git@github.com:uniwue-ai-ks/guppyocr.git
 ```
 
 to the requirements.txt file
